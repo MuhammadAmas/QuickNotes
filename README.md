@@ -30,9 +30,9 @@ Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>N</kbd>, type, hit <kbd>Enter</kbd>. Revi
 
 | | |
 |---|---|
-| **Mac bubble** <br><img src="docs/images/mac-quick-note.png" width="360" alt=""> | A glossy orange bubble floats over every app and Space. Press **⌘⇧N** or **⌃⌥N** anywhere (or click the bubble), type a note, press **Enter**: it's saved to *today* and your meeting app never loses focus. Shift+Enter adds a line. Works offline; notes sync when you're back online. |
-| **Web app** (desktop & phone) <br><img src="docs/images/phone-dark.png" width="180" alt=""> | Notes grouped by day. Tick them off, edit, **drag to set priority**, move unfinished ones to tomorrow (one by one or all at once), search, and **share a note with teammates by email**. Light/dark theme, installable on a phone's home screen, offline-capable, live sync. |
-| **Chrome extension** <br><img src="docs/images/chrome-popup.png" width="240" alt=""> | Toolbar popup (**⌥⇧N**) to add a note for today and tick off today's list. Right-click selected text, a link or a page → **Save to QuickNotes**. The icon badge shows today's open count. |
+| **Mac bubble** <br><img src="docs/images/mac-quick-note.png" width="360" alt=""> | A glossy orange bubble floats over every app and Space. Press **⌘⇧N** or **⌃⌥N** anywhere (or click the bubble), type a note, press **Enter**: it's saved to *today* and your meeting app never loses focus. Shift+Enter adds a line. **Screenshot notes:** press **⌃⌥S** and drag over any area (Space for a whole window), or **⌃⌥F** for the full screen (the display your pointer is on). Both are also under 📷 in the box. Add a description, press Enter. Works offline; notes and screenshots sync when you're back online. |
+| **Web app** (desktop & phone) <br><img src="docs/images/phone-dark.png" width="180" alt=""> | Notes grouped by day. Tick them off, edit, **drag to set priority**, move unfinished ones to tomorrow (one by one or all at once), search, **share a note with teammates by email**, and open screenshot notes full size. Light/dark theme, installable on a phone's home screen, offline-capable, live sync. |
+| **Chrome extension** <br><img src="docs/images/chrome-popup.png" width="240" alt=""> | Toolbar popup (**⌥⇧N**) to add a note for today (optionally with a **screenshot of the current tab**) and tick off today's list. Right-click selected text, a link or a page → **Save to QuickNotes**. The icon badge shows today's open count. |
 
 Everyone signs in with Google; the same notes appear everywhere.
 
@@ -48,7 +48,7 @@ flowchart LR
   subgraph Firebase["Firebase project"]
     H["Hosting<br/>serves web/"]
     A["Authentication<br/>Google sign-in"]
-    F[("Cloud Firestore<br/>qn_notes · users")]
+    F[("Cloud Firestore<br/>qn_notes · qn_attachments · users")]
   end
   W --> H
   W -- sign in --> A
@@ -77,6 +77,7 @@ QuickNotes/
 ├── desktop/                 # macOS app (Swift / AppKit, no Xcode project needed)
 │   ├── main.swift           # bubble, hotkeys, menus, app lifecycle
 │   ├── Capture.swift        # the quick-note box
+│   ├── Screenshot.swift     # screen selection + JPEG compression for screenshot notes
 │   ├── Cloud.swift          # sign-in, Firestore REST, offline queue
 │   ├── Config.swift         # generated from quicknotes.config.json (git-ignored)
 │   ├── BubbleArt.swift      # bubble drawing (also used for the app icon)
@@ -149,7 +150,7 @@ xcode-select --install          # once, if `swiftc --version` fails
 
 Then:
 
-- **Mac app**: on first launch it asks you to **Sign in with Google** (a browser sheet opens). Afterwards press **⌘⇧N** or **⌃⌥N** anywhere. Right-click the bubble for options (sign in/out, hide, swing, open at login).
+- **Mac app**: on first launch it asks you to **Sign in with Google** (a browser sheet opens). Afterwards press **⌘⇧N** or **⌃⌥N** anywhere, or **⌃⌥S** / **⌃⌥F** for an area / full-screen screenshot note. The first screenshot asks for **Screen Recording** permission (System Settings → Privacy & Security → Screen & System Audio Recording → QuickNotes on, then reopen the app). Right-click the bubble for options (sign in/out, hide, swing, open at login).
 - **Chrome extension**: open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and choose `~/Applications/QuickNotes Chrome Extension` (press ⌘⇧G in the picker and paste the path). Pin it, click the bubble icon, then **Continue with Google**.
 - **Web / phone**: open **https://quicknotes-hq.web.app**. On iPhone use Share → *Add to Home Screen*; on Android use ⋮ → *Install app*.
 
@@ -234,6 +235,9 @@ Put the new ID in `extensionId` in `quicknotes.config.json` and redeploy. A Chro
 | `created_at`, `updated_at`, `edited_at`, `completed_at` | ISO timestamps |
 | `original_date`, `times_moved` | set when a note is moved to another day |
 | `sharedWith` | emails the note is shared with |
+| `attachment` | screenshot notes only: `{ id, kind: "screenshot", width, height, thumb }`; `thumb` is a small JPEG data URL |
+
+**`qn_attachments/{id}`**: the full screenshot for a note (`ownerId`, `noteId`, `mime`, `data` = base64 JPEG, `width`, `height`, `created_at`). Screenshots are scaled to at most 2400 px and compressed to under ~700 KB so they fit a Firestore document, which keeps them on the free plan (no Cloud Storage needed). They live outside the note so the notes list stays fast, and are loaded only when opened. Deleting a note deletes its screenshot.
 
 **`users/{uid}`**: one profile per person, written whenever someone signs in or opens an app.
 
@@ -247,6 +251,7 @@ Put the new ID in `extensionId` in `quicknotes.config.json` and redeploy. A Chro
 
 **Rules** ([`firestore.rules`](firestore.rules)):
 - A note can be read by its owner and the people in `sharedWith`. Those people can tick, edit, move and reorder it; only the owner can delete it or change who it's shared with.
+- A screenshot (`qn_attachments`) can be read by its note's owner and the people the note is shared with; only the owner can create or delete it.
 - A person can read and write **only their own** `users` document, and only the fields listed above. Anything you add later (e.g. `plan`, `role`) can therefore only be set by an admin.
 - Everything else in the database is closed.
 
@@ -278,6 +283,8 @@ Edit the narration in `media/voiceover.txt` (one line per scene). Use another in
 | **"This web address isn't allowed to sign in"** (`auth/unauthorized-domain`) | Add the domain under Firebase **Authentication → Settings → Authorized domains**. |
 | **"Google sign-in isn't switched on"** | Authentication → Sign-in method → enable **Google**. |
 | Phone sign-in returns to the sign-in screen | Safari's privacy protection is getting in the way; use `https://<project-id>.firebaseapp.com` on the phone, or set up a custom `authDomain` as described above. |
+| ⌃⌥S / ⌃⌥F screenshot only shows the desktop, or asks for permission | Turn on QuickNotes in System Settings → Privacy & Security → **Screen & System Audio Recording**, then quit and reopen it. After rebuilding the app from source you may need to switch it off and on again, because the unsigned app's identity changes with each build. |
+| "Screenshot this tab" fails in Chrome | Chrome doesn't allow capturing its own pages (`chrome://…`, the Web Store, the PDF viewer). Any normal web page works. |
 | ⌘⇧N doesn't open the bubble | Another app already uses it; ⌃⌥N still works. While QuickNotes runs, ⌘⇧N replaces that shortcut in other apps (e.g. Finder's *New Folder*). |
 | The extension's ⌥⇧N doesn't work | Set it at `chrome://extensions/shortcuts`. |
 | Notes typed in the bubble don't appear | Right-click the bubble. It shows whether you're signed in and how many notes are waiting to sync; they upload automatically when you're back online. |

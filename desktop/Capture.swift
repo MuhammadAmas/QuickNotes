@@ -113,8 +113,8 @@ final class CapturePanel: NSPanel {
 final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     let panel: CapturePanel
     var onOpenDashboard: (() -> Void)?
-    /// Asks the app to hide this box, let the user pick an area, then come back with `attach(_:)`.
-    var onTakeScreenshot: (() -> Void)?
+    /// Asks the app to hide this box, take the screenshot, then come back with `attach(_:)`.
+    var onTakeScreenshot: ((CaptureMode) -> Void)?
 
     private let cloud: Cloud
     private let field = NSTextField()
@@ -205,10 +205,10 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         camera.imagePosition = .imageLeading
         camera.imageHugsTitle = true
         camera.contentTintColor = Palette.accent
-        camera.attributedTitle = NSAttributedString(string: " Screenshot", attributes: [
+        camera.attributedTitle = NSAttributedString(string: " Screenshot ▾", attributes: [
             .font: NSFont.systemFont(ofSize: 12, weight: .semibold), .foregroundColor: Palette.accent,
         ])
-        camera.toolTip = "Add a screenshot (⌃⌥S)"
+        camera.toolTip = "Add a screenshot: an area (⌃⌥S) or the full screen (⌃⌥F)"
 
         // screenshot preview, shown above the text when one is attached
         previewImage.imageScaling = .scaleProportionallyUpOrDown
@@ -442,9 +442,21 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         ])
     }
 
-    @objc private func takeScreenshot() {
-        onTakeScreenshot?()
+    /// The 📷 button: choose an area or the whole screen.
+    @objc private func takeScreenshot(_ sender: NSButton) {
+        let menu = NSMenu()
+        let area = menu.addItem(withTitle: "Select Area…", action: #selector(captureArea), keyEquivalent: "s")
+        area.keyEquivalentModifierMask = [.control, .option]
+        area.image = NSImage(systemSymbolName: "rectangle.dashed", accessibilityDescription: nil)
+        let full = menu.addItem(withTitle: "Full Screen", action: #selector(captureFullScreen), keyEquivalent: "f")
+        full.keyEquivalentModifierMask = [.control, .option]
+        full.image = NSImage(systemSymbolName: "display", accessibilityDescription: nil)
+        for item in menu.items { item.target = self }
+        menu.popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.height + 4), in: sender)
     }
+
+    @objc private func captureArea() { onTakeScreenshot?(.area) }
+    @objc private func captureFullScreen() { onTakeScreenshot?(.fullScreen) }
 
     // MARK: actions
 

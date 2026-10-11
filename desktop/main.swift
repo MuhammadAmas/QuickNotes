@@ -130,9 +130,9 @@ final class BubbleView: NSView {
     }
 }
 
-// MARK: - Global hotkeys (⌘⇧N / ⌃⌥N note, ⌃⌥S screenshot), via Carbon so no Accessibility permission is needed
+// MARK: - Global hotkeys (⌘⇧N / ⌃⌥N note, ⌃⌥S area / ⌃⌥F full-screen screenshot), via Carbon so no Accessibility permission is needed
 
-enum HotKey: UInt32 { case note = 1, noteAlt = 2, screenshot = 3 }
+enum HotKey: UInt32 { case note = 1, noteAlt = 2, screenshot = 3, fullScreenshot = 4 }
 var hotKeyAction: ((HotKey) -> Void)?
 
 func registerHotKeys() {
@@ -150,6 +150,7 @@ func registerHotKeys() {
         (.noteAlt, kVK_ANSI_N, controlKey | optionKey, "⌃⌥N"),
         (.note, kVK_ANSI_N, cmdKey | shiftKey, "⌘⇧N"),
         (.screenshot, kVK_ANSI_S, controlKey | optionKey, "⌃⌥S"),
+        (.fullScreenshot, kVK_ANSI_F, controlKey | optionKey, "⌃⌥F"),
     ]
     for (key, code, modifiers, label) in shortcuts {
         var ref: EventHotKeyRef?
@@ -183,8 +184,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         capture.onOpenDashboard = { [weak self] in self?.showDashboard() }
         cloud.anchorWindow = bubble
-        capture.onTakeScreenshot = { [weak self] in self?.takeScreenshot() }
-        hotKeyAction = { [weak self] key in key == .screenshot ? self?.takeScreenshot() : self?.toggleCapture() }
+        capture.onTakeScreenshot = { [weak self] mode in self?.takeScreenshot(mode) }
+        hotKeyAction = { [weak self] key in
+            switch key {
+            case .screenshot: self?.takeScreenshot(.area)
+            case .fullScreenshot: self?.takeScreenshot(.fullScreen)
+            case .note, .noteAlt: self?.toggleCapture()
+            }
+        }
         registerHotKeys()
 
         NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification,
@@ -256,22 +263,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: screenshot notes
 
-    /// Hides the bubble and the note box, lets the user pick an area, then reopens the box with it attached.
-    @objc func takeScreenshot() {
+    @objc func takeAreaScreenshot() { takeScreenshot(.area) }
+    @objc func takeFullScreenshot() { takeScreenshot(.fullScreen) }
+
+    /// Hides the bubble and the note box, takes the screenshot, then reopens the box with it attached.
+    func takeScreenshot(_ mode: CaptureMode) {
         guard ScreenshotTaker.hasPermission else { return askForScreenRecording() }
         let bubbleWasVisible = bubble.isVisible
         let boxWasVisible = capture.isVisible
         capture.panel.orderOut(nil)
         bubble.orderOut(nil)
-        ScreenshotTaker.capture { [weak self] shot in
-            guard let self else { return }
-            if bubbleWasVisible { self.bubble.orderFrontRegardless() }
-            let anchor = self.bubble.isVisible ? self.bubble.frame : nil
-            if let shot {
-                self.capture.attach(shot, near: anchor)
-            } else if boxWasVisible {
-                self.capture.show(near: anchor) // Esc during selection: back to where you were
+        // a full-screen shot is instant, so give the windows a moment to leave the screen first
+        let delay = mode == .fullScreen ? 0.25 : 0
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            ScreenshotTaker.capture(mode) { [weak self] shot in
+                self?.screenshotTaken(shot, bubbleWasVisible: bubbleWasVisible, boxWasVisible: boxWasVisible)
             }
+        }
+    }
+
+    private func screenshotTaken(_ shot: Screenshot?, bubbleWasVisible: Bool, boxWasVisible: Bool) {
+        if bubbleWasVisible { bubble.orderFrontRegardless() }
+        let anchor = bubble.isVisible ? bubble.frame : nil
+        if let shot {
+            capture.attach(shot, near: anchor)
+        } else if boxWasVisible {
+            capture.show(near: anchor) // Esc during selection: back to where you were
         }
     }
 
@@ -335,7 +352,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildBubbleMenu(includeQuit: Bool = true) -> NSMenu {
         let menu = NSMenu()
         menu.addItem(withTitle: "New Note   ⌘⇧N  or  ⌃⌥N", action: #selector(newNote), keyEquivalent: "")
-        menu.addItem(withTitle: "Screenshot Note   ⌃⌥S", action: #selector(takeScreenshot), keyEquivalent: "")
+        menu.addItem(withTitle: "Screenshot of Area   ⌃⌥S", action: #selector(takeAreaScreenshot), keyEquivalent: "")
+        menu.addItem(withTitle: "Screenshot of Full Screen   ⌃⌥F", action: #selector(takeFullScreenshot), keyEquivalent: "")
         menu.addItem(withTitle: "Open All Notes", action: #selector(showDashboard), keyEquivalent: "")
         menu.addItem(.separator())
         if let s = cloud.session {
@@ -377,7 +395,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let fileItem = main.addItem(withTitle: "File", action: nil, keyEquivalent: "")
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(withTitle: "New Quick Note", action: #selector(newNote), keyEquivalent: "n").target = self
-        fileMenu.addItem(withTitle: "New Screenshot Note", action: #selector(takeScreenshot), keyEquivalent: "").target = self
+        fileMenu.addItem(withTitle: "Screenshot Note: Area", action: #selector(takeAreaScreenshot), keyEquivalent: "").target = self
+        fileMenu.addItem(withTitle: "Screenshot Note: Full Screen", action: #selector(takeFullScreenshot), keyEquivalent: "").target = self
         fileMenu.addItem(withTitle: "Open All Notes", action: #selector(showDashboard), keyEquivalent: "o").target = self
         fileMenu.addItem(withTitle: "Show/Hide Bubble", action: #selector(toggleBubble), keyEquivalent: "b").target = self
         fileItem.submenu = fileMenu
