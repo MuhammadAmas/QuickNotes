@@ -1,0 +1,11 @@
+:memo: Never lose a meeting action item again – meet *QuickNotes*.
+
+On a call and someone says "can you follow up on…"? Press *⌘⇧N*, type it, hit Enter. It's saved to today's list – no app switching, the call never leaves your screen.
+
+Once a day, open QuickNotes to tick things off, drag to set priority, or move unfinished items to tomorrow.
+
+• Web, phone & Chrome extension (⌥⇧N)
+• Share a note with a teammate
+• Syncs live, works offline
+
+Try it: https://quicknotes-hq.web.app (sign in with Google). 1-min demo with voiceover :point_down:

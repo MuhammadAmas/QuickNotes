@@ -1,0 +1,46 @@
+# ── secrets & project configuration ─────────────────────────────────────────
+# All project keys/IDs live in quicknotes.config.json (copy quicknotes.config.example.json).
+quicknotes.config.json
+# ...and these are generated from it by scripts/configure.py:
+web/firebase-config.js
+extension/config.js
+desktop/Config.swift
+.firebaserc
+firebase.json
+
+# private keys, certificates, credentials
+*.pem
+*.key
+*.p12
+*.p8
+*.cer
+*.mobileprovision
+.env
+.env.*
+!.env.example
+service-account*.json
+*-service-account.json
+*firebase-adminsdk*.json
+google-services.json
+GoogleService-Info.plist
+session.json
+pending.json
+
+# ── build output ─────────────────────────────────────────────────────────────
+build/
+
+# ── Firebase CLI caches and logs ─────────────────────────────────────────────
+.firebase/
+firebase-debug.log*
+firestore-debug.log*
+ui-debug.log*
+
+# ── generated demo media (rebuild with media/make_video.sh) ─────────────────
+media/shots/
+media/voice/
+media/*.mp4
+
+# ── misc ─────────────────────────────────────────────────────────────────────
+.DS_Store
+node_modules/
+*.log

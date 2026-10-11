@@ -1,0 +1,11 @@
+This is QuickNotes: the fastest way to capture what you need to remember from a meeting.
+Say you're on a call, and someone asks you to follow up on something. Don't switch apps. Just press Command, Shift, N.
+A note box pops up right where you are. Type the action item, press Enter, and it's saved to today. Your meeting never leaves the screen.
+Later, open QuickNotes on the web, your phone, or your Mac. Everything you captured is waiting in today's list.
+Tick things off as you finish them.
+Drag tasks up or down to set your priorities.
+Didn't get to something? Move it to tomorrow in one click. Overdue days are flagged, so nothing slips.
+Need a teammate on it? Share the note by email.
+It works on your phone too, with dark mode, and everything syncs live.
+In Chrome, press Option, Shift, N, or right-click any text to save it.
+QuickNotes. Press Command, Shift, N, and never lose an action item again.

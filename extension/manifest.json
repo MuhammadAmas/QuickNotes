@@ -1,0 +1,48 @@
+{
+  "manifest_version": 3,
+  "name": "QuickNotes",
+  "short_name": "QuickNotes",
+  "version": "1.2.0",
+  "description": "Jot a note for today in a second, from any tab. Syncs with QuickNotes on your Mac and phone.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAsbUddSYc3Ks1NZrmViSGuSw+Ug7J8m62gk32O5+QQCaHH62rakNnc1IMSeh2bgA0BLGc1ePuAVFqkqoie7pNpkZC/4jRvpy+zWZlGXPsMN0ZHchsAx/SMrdirGfdK+geJPnJLqQEu8JJmX3pRP9m68RMWRqSiejTJ/lo+HG6ea1QJ7yj+dgEcx/snmXV2yjxIAwVo+iIkvJShekxRpRD6O1qtRZk0sqBtrL8TikO4rtYzqFYGcmEMnAWdt1htohlIGKg8b86h/do3KjTaw8IrYqUbsjL9M9OOAk/3wSZFUYhn8mjUsPaGzdl2jSTdAEEfcYxavTR59owBAx92/hleQIDAQAB",
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "action": {
+    "default_title": "QuickNotes (⌥⇧N)",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "commands": {
+    "_execute_action": {
+      "suggested_key": {
+        "default": "Alt+Shift+N",
+        "mac": "Alt+Shift+N"
+      },
+      "description": "Open QuickNotes"
+    }
+  },
+  "permissions": [
+    "activeTab",
+    "alarms",
+    "contextMenus",
+    "identity",
+    "storage"
+  ],
+  "host_permissions": [
+    "https://firestore.googleapis.com/*",
+    "https://identitytoolkit.googleapis.com/*",
+    "https://securetoken.googleapis.com/*"
+  ]
+}

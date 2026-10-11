@@ -1,0 +1,103 @@
+rules_version = '2';
+
+// QuickNotes: each note belongs to its owner; the owner can share it with
+// other people by email. People it's shared with can tick, edit, move and reorder it,
+// but only the owner can delete it or change who it's shared with.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    match /qn_notes/{noteId} {
+      function signedIn() {
+        return request.auth != null;
+      }
+
+      function owns(data) {
+        return signedIn() && data.ownerId == request.auth.uid;
+      }
+
+      function sharedWithMe(data) {
+        return signedIn()
+          && request.auth.token.email_verified == true
+          && request.auth.token.email in data.sharedWith;
+      }
+
+      function validNote(d) {
+        return d.content is string && d.content.size() > 0 && d.content.size() <= 10000
+          && d.note_date is string && d.note_date.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+          && d.status in ['open', 'done']
+          && d.ownerId is string
+          && d.sharedWith is list && d.sharedWith.size() <= 50
+          && (!('order' in d) || d.order is number)
+          && (!('attachment' in d) || (d.attachment is map && d.attachment.thumb is string
+                                       && d.attachment.thumb.size() < 200000));
+      }
+
+      allow read: if owns(resource.data) || sharedWithMe(resource.data);
+
+      allow create: if owns(request.resource.data) && validNote(request.resource.data);
+
+      allow update: if validNote(request.resource.data) && (
+        (owns(resource.data) && request.resource.data.ownerId == resource.data.ownerId)
+        || (sharedWithMe(resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+              'content', 'status', 'note_date', 'updated_at', 'edited_at',
+              'completed_at', 'original_date', 'times_moved', 'order'
+            ]))
+      );
+
+      allow delete: if owns(resource.data);
+    }
+
+    // Screenshots attached to notes: the full image (base64 JPEG/PNG), kept out of the note
+    // so the notes list stays light. Readable by whoever can read the note it belongs to.
+    match /qn_attachments/{attachmentId} {
+      function noteOf(a) {
+        return get(/databases/$(database)/documents/qn_notes/$(a.noteId)).data;
+      }
+
+      allow read: if request.auth != null && (
+        resource.data.ownerId == request.auth.uid
+        || (request.auth.token.email_verified == true
+            && request.auth.token.email in noteOf(resource.data).sharedWith)
+      );
+
+      allow create: if request.auth != null
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.keys().hasOnly(['ownerId', 'noteId', 'mime', 'data', 'width', 'height', 'created_at'])
+        && request.resource.data.mime in ['image/jpeg', 'image/png']
+        && request.resource.data.data is string
+        && request.resource.data.data.size() < 1000000;
+
+      allow delete: if request.auth != null && resource.data.ownerId == request.auth.uid;
+    }
+
+    // One profile per signed-in person, written by the apps on sign-in / launch.
+    // People can read and write only their own, and only these fields; anything
+    // added later (plan, role, ...) can only be set by an admin, never by the user.
+    match /users/{uid} {
+      function ownProfile() {
+        return request.auth != null && request.auth.uid == uid;
+      }
+
+      function validProfile(d) {
+        return d.uid == uid
+          && d.keys().hasOnly([
+            'uid', 'email', 'displayName', 'photoURL', 'providers', 'createdAt',
+            'lastSignInAt', 'lastSeenAt', 'visits', 'locale', 'timeZone', 'clients'
+          ])
+          && (!('email' in d) || d.email is string)
+          && (!('visits' in d) || d.visits is int)
+          && (!('clients' in d) || d.clients is map);
+      }
+
+      allow read: if ownProfile();
+      allow create, update: if ownProfile() && validProfile(request.resource.data);
+      allow delete: if false;
+    }
+
+    // anything else in this database stays closed
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
