@@ -242,6 +242,8 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         hints.setViews([keyHint("↵", "Save"), keyHint("esc", "Close")], in: .leading)
         hints.spacing = 12
         status.isHidden = true
+        status.lineBreakMode = .byTruncatingTail
+        status.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
 
         for v in [mark, glyph, title, chip, dateChip, well, field, open, camera, mic, hints, status, previewBox, previewImage, remove] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
@@ -304,6 +306,7 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             hints.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
             hints.centerYAnchor.constraint(equalTo: open.centerYAnchor),
             status.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
+            status.leadingAnchor.constraint(greaterThanOrEqualTo: mic.trailingAnchor, constant: 12),
             status.centerYAnchor.constraint(equalTo: open.centerYAnchor),
         ])
         fitToText(keepTop: false)
@@ -447,17 +450,31 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         fitToText(keepTop: true)
     }
 
-    private func dictationEnded(_ error: String?) {
+    private func dictationEnded(_ problem: VoiceProblem?) {
         mic.contentTintColor = Palette.accent
         mic.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice note")?
             .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
-        if let error {
-            well.stroke = Palette.danger
-            showStatus(error, color: Palette.danger)
-        } else if !saving {
-            showHints()
+        guard let problem else {
+            if !saving { showHints() }
+            panel.makeFirstResponder(field)
+            return
         }
-        panel.makeFirstResponder(field)
+        well.stroke = Palette.danger
+        showStatus("Voice note didn’t start", color: Palette.danger)
+        status.toolTip = problem.message
+        if let url = problem.settingsURL {
+            // needs a change in System Settings: say exactly what, with a button to get there
+            let alert = NSAlert()
+            alert.messageText = "Voice notes need one setting"
+            alert.informativeText = problem.message
+            alert.addButton(withTitle: "Open System Settings")
+            alert.addButton(withTitle: "Not Now")
+            NSApp.activate(ignoringOtherApps: true)
+            if alert.runModal() == .alertFirstButtonReturn { NSWorkspace.shared.open(url) }
+        } else {
+            showStatus(problem.message, color: Palette.danger)
+            panel.makeFirstResponder(field)
+        }
     }
 
     // MARK: screenshot
