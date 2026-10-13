@@ -1,4 +1,5 @@
-import { MAX_CONTENT, normalizeEmails } from "./notes-model.js";
+import { checklistItem, MAX_CONTENT, normalizeEmails, parseChecklist, TRASH_DAYS } from "./notes-model.js";
+import { barChart } from "./charts.js";
 
 // ---------- data source: Firestore, or an in-memory demo on localhost?demo ----------
 
@@ -125,16 +126,24 @@ const state = {
   notes: [],          // everything I own plus everything shared with me (live)
   loaded: false,
   loadError: null,
-  view: "day",        // "day" | "open" | "done" | "shared"
+  view: "day",        // "day" | "open" | "done" | "shared" | "week" | "summary" | "trash"
   date: today(),
+  week: null,         // Monday (YYYY-MM-DD) of the week shown in the week view
+  checklistFor: null, // note whose "add item" box is open
   query: "",
   editingId: null,
   completedOpen: prefs.get("qn-completed-open", "1") === "1",
 };
-const pendingDeletes = new Map(); // id -> timeout handle
-
 const isMine = (n) => n.ownerId === state.user?.uid;
-const liveNotes = () => state.notes.filter((n) => !pendingDeletes.has(n.id));
+const liveNotes = () => state.notes.filter((n) => !n.deleted_at);
+const trashedNotes = () => state.notes.filter((n) => n.deleted_at && isMine(n));
+/** Monday of the week containing `iso`. */
+function weekStart(iso) {
+  const d = parseIso(iso);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return isoOf(d);
+}
+const localDay = (ts) => (ts ? isoOf(new Date(ts)) : null);
 
 function daySummaries() {
   const days = new Map();
@@ -151,7 +160,8 @@ function notesForView() {
   const all = liveNotes();
   if (state.query) {
     const q = state.query.toLowerCase();
-    return all.filter((n) => n.content.toLowerCase().includes(q) || (n.ownerName || "").toLowerCase().includes(q));
+    return all.filter((n) => n.content.toLowerCase().includes(q) || (n.ownerName || "").toLowerCase().includes(q)
+      || (n.checklist || []).some((i) => i.text.toLowerCase().includes(q)));
   }
   switch (state.view) {
     case "open": return all.filter((n) => n.status === "open");
@@ -176,7 +186,8 @@ function applyTheme(choice) {
 
 function readHash() {
   const [, view, arg] = location.hash.split("/");
-  if (["open", "done", "shared"].includes(view)) state.view = view;
+  if (["open", "done", "shared", "summary", "trash"].includes(view)) state.view = view;
+  else if (view === "week") { state.view = "week"; state.week = weekStart(/^\d{4}-\d{2}-\d{2}$/.test(arg || "") ? arg : today()); }
   else if (view === "day" && /^\d{4}-\d{2}-\d{2}$/.test(arg || "")) { state.view = "day"; state.date = arg; }
   else { state.view = "day"; state.date = today(); }
 }
@@ -186,7 +197,7 @@ function go(view, date) {
   $("search").value = "";
   state.editingId = null;
   closeDrawer();
-  const hash = view === "day" ? `#/day/${date || today()}` : `#/${view}`;
+  const hash = view === "day" ? `#/day/${date || today()}` : view === "week" ? `#/week/${weekStart(date || today())}` : `#/${view}`;
   if (location.hash === hash) { readHash(); render(); } else location.hash = hash;
 }
 
@@ -196,9 +207,16 @@ function render() {
   if (!state.user) return;
   if (state.editingId != null && document.querySelector(".edit-box")) return; // don't clobber an edit in progress
   if (drag) return; // or a drag in progress
+  // inline inputs (checklist "add item", week "add") survive live re-renders
+  const active = document.activeElement;
+  const keep = active?.dataset?.keep ? { key: active.dataset.keep, value: active.value, at: active.selectionStart } : null;
   renderSidebar();
   renderMain();
   renderShareDialog();
+  if (keep) {
+    const again = document.querySelector(`[data-keep="${CSS.escape(keep.key)}"]`);
+    if (again) { again.value = keep.value; again.focus(); again.setSelectionRange(keep.at, keep.at); }
+  }
 }
 
 function renderAccount() {
@@ -217,10 +235,12 @@ function renderSidebar() {
   $("count-open").textContent = all.filter((n) => n.status === "open").length || "";
   $("count-done").textContent = all.filter((n) => n.status === "done").length || "";
   $("count-shared").textContent = all.filter((n) => !isMine(n) && n.status === "open").length || "";
+  $("count-trash").textContent = trashedNotes().length || "";
 
   for (const btn of document.querySelectorAll(".nav-item")) {
     const v = btn.dataset.view;
     const active = !state.query && (v === "today" ? state.view === "day" && state.date === t : state.view === v);
+    btn.setAttribute("aria-current", active ? "page" : "false");
     btn.classList.toggle("active", active);
   }
 
@@ -248,6 +268,20 @@ const VIEW_TEXT = {
 
 function renderMain() {
   const t = today();
+  const special = !state.query && ["week", "summary", "trash"].includes(state.view);
+  document.querySelector(".content").classList.toggle("wide", !state.query && state.view === "week");
+  $("go-today").textContent = state.view === "week" && !state.query ? "This week" : "Today";
+  if (special) {
+    $("progress").hidden = true;
+    $("composer").hidden = true;
+    $("day-nav").hidden = state.view !== "week";
+    const list = $("list");
+    list.replaceChildren();
+    if (!state.loaded && !state.loadError) { list.append(h("div", { class: "loading" }, "Loading your notes…")); return; }
+    if (state.view === "week") return renderWeek(list);
+    if (state.view === "summary") return renderSummary(list);
+    return renderTrash(list);
+  }
   const isDay = state.view === "day" && !state.query;
   const visible = notesForView();
   const open = visible.filter((n) => n.status === "open").sort(byRank);
@@ -331,6 +365,213 @@ function renderMain() {
   }
 }
 
+// ---------- week view ----------
+
+function renderWeek(list) {
+  const t = today();
+  const start = state.week || weekStart(t);
+  const days = [...Array(7)].map((_, i) => addDays(start, i));
+  const thisWeek = start === weekStart(t);
+  $("eyebrow").textContent = `${shortDate(days[0])} – ${shortDate(days[6])}`;
+  $("title").textContent = thisWeek ? "This week" : "Week";
+  $("go-today").disabled = thisWeek;
+
+  const byDay = new Map(days.map((d) => [d, []]));
+  for (const n of liveNotes()) byDay.get(n.note_date)?.push(n);
+
+  const grid = h("div", { class: "week" });
+  for (const d of days) {
+    const notes = byDay.get(d).sort((a, b) => (a.status === b.status ? byRank(a, b) : a.status === "done" ? 1 : -1));
+    const open = notes.filter((n) => n.status === "open").length;
+    const col = h("section", {
+      class: `week-col${d === t ? " is-today" : ""}${d < t ? " is-past" : ""}`, "data-date": d,
+      ondragover: (e) => { e.preventDefault(); e.currentTarget.classList.add("drop"); },
+      ondragleave: (e) => { if (!e.currentTarget.contains(e.relatedTarget)) e.currentTarget.classList.remove("drop"); },
+      ondrop: (e) => {
+        e.preventDefault();
+        e.currentTarget.classList.remove("drop");
+        const note = state.notes.find((n) => n.id === e.dataTransfer.getData("text/plain"));
+        if (note && note.note_date !== d) moveNote(note, d);
+      },
+    },
+      h("button", { class: "week-head", onclick: () => go("day", d), title: `Open ${longDate(d)}` },
+        h("span", {}, parseIso(d).toLocaleDateString(undefined, { weekday: "short" })),
+        h("b", {}, parseIso(d).getDate()),
+        open ? h("span", { class: "count" }, open) : null),
+      h("ul", { class: "week-notes" }, notes.map((n) => weekCard(n))),
+      h("form", { class: "week-add", onsubmit: (e) => {
+        e.preventDefault();
+        const input = e.currentTarget.querySelector("input");
+        const text = input.value.trim();
+        if (!text) return;
+        input.value = "";
+        addNote(text, d);
+      } }, h("input", { type: "text", placeholder: "+ Add", "aria-label": `Add a note for ${longDate(d)}`, "data-keep": `week-${d}` })));
+    grid.append(col);
+  }
+  list.append(grid, h("p", { class: "hint" }, "Drag a note to another day to move it. Click a day to open it."));
+}
+
+function weekCard(n) {
+  const done = n.status === "done";
+  const items = n.checklist || [];
+  return h("li", {
+    class: `week-card${done ? " done" : ""}`, draggable: "true",
+    ondragstart: (e) => { e.dataTransfer.setData("text/plain", n.id); e.dataTransfer.effectAllowed = "move"; e.currentTarget.classList.add("dragging"); },
+    ondragend: (e) => e.currentTarget.classList.remove("dragging"),
+  },
+    h("button", {
+      class: "check small", role: "checkbox", "aria-checked": String(done), "aria-label": done ? "Mark as not done" : "Mark as done",
+      onclick: () => setStatus(n, done ? "open" : "done"),
+    }, icon("check")),
+    h("div", { class: "week-text" },
+      h("span", {}, linkify(n.content)),
+      items.length || n.attachment || !isMine(n) ? h("span", { class: "week-meta" },
+        items.length ? `☑ ${items.filter((i) => i.done).length}/${items.length}` : null,
+        n.attachment ? " 📷" : null,
+        !isMine(n) ? ` · ${n.ownerName || n.ownerEmail}` : null) : null));
+}
+
+// ---------- weekly summary ----------
+
+function renderSummary(list) {
+  const t = today();
+  const from = addDays(t, -6);
+  const days = [...Array(7)].map((_, i) => addDays(from, i));
+  const inWeek = (d) => d && d >= from && d <= t;
+  const inPrev = (d) => d && d >= addDays(from, -7) && d < from;
+  const notes = liveNotes();
+
+  const added = notes.filter((n) => inWeek(localDay(n.created_at)));
+  const done = notes.filter((n) => n.status === "done" && inWeek(localDay(n.completed_at)));
+  const donePrev = notes.filter((n) => n.status === "done" && inPrev(localDay(n.completed_at))).length;
+  const addedDone = added.filter((n) => n.status === "done").length;
+  const overdue = notes.filter((n) => n.status === "open" && n.note_date < t);
+  const slipping = notes.filter((n) => n.status === "open" && (n.times_moved || 0) >= 2)
+    .sort((a, b) => b.times_moved - a.times_moved);
+
+  $("eyebrow").textContent = `Last 7 days · ${shortDate(from)} – ${shortDate(t)}`;
+  $("title").textContent = "Weekly summary";
+
+  const delta = done.length - donePrev;
+  const tile = (label, value, sub, cls = "") => h("div", { class: `stat ${cls}` },
+    h("span", { class: "stat-label" }, label), h("b", { class: "stat-value" }, value), sub ? h("span", { class: "stat-sub" }, sub) : null);
+  list.append(h("div", { class: "stats" },
+    tile("Done", done.length, donePrev || done.length ? `${delta >= 0 ? "▲" : "▼"} ${Math.abs(delta)} vs previous 7 days` : "nothing yet"),
+    tile("Added", added.length, `${plural(added.length, "note")} captured`),
+    tile("Finished what you added", added.length ? `${Math.round((addedDone / added.length) * 100)}%` : "–",
+      added.length ? `${addedDone} of ${added.length}` : "add notes to see this"),
+    tile("Overdue", overdue.length, overdue.length ? "open from earlier days" : "all caught up", overdue.length ? "warn" : "")));
+
+  const day = (d) => parseIso(d).toLocaleDateString(undefined, { weekday: "short" });
+  list.append(h("section", { class: "panel" },
+    h("h2", { class: "group-title" }, "Added vs done, per day"),
+    barChart({
+      title: "Notes added and done per day, last 7 days",
+      categories: days.map(day),
+      series: [
+        { name: "Added", values: days.map((d) => added.filter((n) => localDay(n.created_at) === d).length) },
+        { name: "Done", values: days.map((d) => done.filter((n) => localDay(n.completed_at) === d).length) },
+      ],
+    })));
+
+  if (slipping.length) {
+    list.append(h("section", {},
+      groupHead(h("h2", { class: "group-title" }, "Keeps slipping", h("span", { class: "n" }, slipping.length)),
+        h("span", { class: "hint inline" }, "moved to another day 2+ times")),
+      noteList(slipping.slice(0, 10))));
+  }
+  if (done.length) {
+    list.append(h("section", {},
+      groupHead(h("h2", { class: "group-title" }, "Finished this week", h("span", { class: "n" }, done.length))),
+      noteList(done.sort((a, b) => (a.completed_at < b.completed_at ? 1 : -1)).slice(0, 15))));
+  }
+}
+
+// ---------- trash ----------
+
+let purged = false;
+
+function renderTrash(list) {
+  $("eyebrow").textContent = `Deleted notes are removed for good after ${TRASH_DAYS} days`;
+  $("title").textContent = "Trash";
+  const notes = trashedNotes().sort((a, b) => (a.deleted_at < b.deleted_at ? 1 : -1));
+  if (!notes.length) {
+    list.append(h("div", { class: "empty" }, h("div", { class: "empty-icon" }, icon("trash")), h("strong", {}, "Trash is empty"),
+      "Deleted notes stay here for 30 days so you can bring them back."));
+    return;
+  }
+  list.append(groupHead(h("h2", { class: "group-title" }, "Deleted", h("span", { class: "n" }, notes.length)),
+    h("div", { class: "group-actions" }, h("button", { class: "ghost-btn danger", onclick: emptyTrash }, "Empty trash"))));
+  list.append(h("ul", { class: "notes" }, notes.map((n) => {
+    const daysAgo = Math.floor((Date.now() - new Date(n.deleted_at)) / 86400000);
+    return h("li", { class: "note trashed" },
+      h("span", { class: "trash-icon" }, icon("trash")),
+      h("div", {},
+        h("div", { class: "note-text" }, n.content),
+        h("div", { class: "meta" }, h("span", { class: "chip" },
+          `deleted ${daysAgo === 0 ? "today" : `${plural(daysAgo, "day")} ago`} · gone in ${plural(Math.max(0, TRASH_DAYS - daysAgo), "day")}`))),
+      h("div", { class: "note-actions always" },
+        h("button", { class: "ghost-btn accent", onclick: () => run(store.update(n, { deleted: false }), "Restored") }, icon("redo"), "Restore"),
+        h("button", { class: "icon-btn danger", title: "Delete forever", "aria-label": "Delete forever", onclick: () => deleteForever(n) }, icon("x"))));
+  })));
+}
+
+function deleteForever(n) {
+  if (!confirm("Delete this note forever? This can’t be undone.")) return;
+  run(store.remove(n), "Deleted forever");
+}
+
+function emptyTrash() {
+  const notes = trashedNotes();
+  if (!notes.length || !confirm(`Delete ${plural(notes.length, "note")} forever? This can’t be undone.`)) return;
+  for (const n of notes) run(store.remove(n));
+  toast("Trash emptied");
+}
+
+/** Once per session: permanently remove notes that have been in the Trash longer than TRASH_DAYS. */
+function purgeOldTrash() {
+  if (purged || !state.loaded) return;
+  purged = true;
+  const cutoff = Date.now() - TRASH_DAYS * 86400000;
+  for (const n of trashedNotes()) if (new Date(n.deleted_at).getTime() < cutoff) store.remove(n).catch(() => {});
+}
+
+// ---------- checklists ----------
+
+function checklistBlock(n) {
+  const items = n.checklist || [];
+  const save = (next) => run(store.update(n, { checklist: next }));
+  const adding = state.checklistFor === n.id;
+  return h("div", { class: "checklist" },
+    items.length ? h("ul", {}, items.map((it) => h("li", { class: it.done ? "done" : "" },
+      h("button", {
+        class: "cl-check", role: "checkbox", "aria-checked": String(it.done), "aria-label": it.done ? "Untick item" : "Tick item",
+        onclick: () => save(items.map((x) => (x.id === it.id ? { ...x, done: !x.done } : x))),
+      }, icon("check")),
+      h("span", {}, linkify(it.text)),
+      h("button", { class: "cl-remove", title: "Remove item", "aria-label": "Remove item", onclick: () => save(items.filter((x) => x.id !== it.id)) }, icon("x"))))) : null,
+    adding
+      ? h("form", { class: "cl-add", onsubmit: (e) => {
+          e.preventDefault();
+          const input = e.currentTarget.querySelector("input");
+          const text = input.value.trim();
+          if (text) save([...items, checklistItem(text)]);
+          input.value = "";
+        } }, h("input", {
+          type: "text", placeholder: "Add an item, press Enter", "aria-label": "New checklist item", "data-keep": `cl-${n.id}`,
+          onkeydown: (e) => { if (e.key === "Escape") { state.checklistFor = null; renderMain(); } },
+          onblur: (e) => { if (!e.target.value.trim()) setTimeout(() => { if (state.checklistFor === n.id && document.activeElement?.dataset?.keep !== `cl-${n.id}`) { state.checklistFor = null; renderMain(); } }, 150); },
+        }))
+      : items.length ? h("button", { class: "cl-add-btn", onclick: () => openChecklist(n.id) }, icon("plus"), "Add item") : null);
+}
+
+function openChecklist(id) {
+  state.checklistFor = id;
+  renderMain();
+  requestAnimationFrame(() => document.querySelector(`[data-keep="cl-${CSS.escape(id)}"]`)?.focus());
+}
+
 function groupHead(...children) {
   return h("div", { class: "group-head" }, children);
 }
@@ -372,11 +613,14 @@ function noteItem(n, draggable) {
   }
   if (n.edited_at) meta.push(h("span", { class: "chip edited", title: new Date(n.edited_at).toLocaleString() }, icon("pencil"), `updated ${timeOf(n.edited_at)}`));
   if (done && n.completed_at) meta.push(h("span", { class: "chip donechip" }, icon("check"), `done ${timeOf(n.completed_at)}`));
+  const items = n.checklist || [];
+  if (items.length) meta.push(h("span", { class: "chip" }, icon("list-checks"), `${items.filter((i) => i.done).length}/${items.length}`));
 
   const editing = state.editingId === n.id;
   const shot = SAFE_IMAGE.test(n.attachment?.thumb || "") ? n.attachment : null;
   const body = editing ? editor(n) : h("div", {},
     h("div", { class: "note-text", ondblclick: () => startEdit(n.id), title: "Double-click to edit" }, linkify(n.content)),
+    items.length || state.checklistFor === n.id ? checklistBlock(n) : null,
     shot ? h("button", { class: "shot", title: "View screenshot", "aria-label": "View screenshot", onclick: () => openShot(n) },
       h("img", { src: shot.thumb, alt: "", loading: "lazy" })) : null,
     h("div", { class: "meta" }, meta));
@@ -394,6 +638,7 @@ function noteItem(n, draggable) {
     body,
     h("div", { class: "note-actions" },
       h("button", { class: "icon-btn", title: "Edit", "aria-label": "Edit note", onclick: () => startEdit(n.id) }, icon("pencil")),
+      items.length ? null : h("button", { class: "icon-btn", title: "Add a checklist", "aria-label": "Add a checklist", onclick: () => openChecklist(n.id) }, icon("list-checks")),
       done ? null : h("button", { class: "icon-btn go", title: moveLabel, "aria-label": moveLabel, onclick: () => moveNote(n, moveTo) }, icon("arrow-right")),
       mine ? h("button", { class: "icon-btn share", title: "Share", "aria-label": "Share note", onclick: () => openShare(n.id) }, icon("share")) : null,
       mine ? h("button", { class: "icon-btn danger", title: "Delete", "aria-label": "Delete note", onclick: () => deleteNote(n) }, icon("trash")) : null));
@@ -573,22 +818,14 @@ function carryOver(from, to) {
 }
 
 function deleteNote(n) {
-  const handle = setTimeout(() => {
-    pendingDeletes.delete(n.id);
-    run(store.remove(n));
-  }, 5000);
-  pendingDeletes.set(n.id, handle);
-  render();
-  toast("Note deleted", "Undo", () => {
-    clearTimeout(pendingDeletes.get(n.id));
-    pendingDeletes.delete(n.id);
-    render();
-  });
+  run(store.update(n, { deleted: true }));
+  toast("Moved to Trash", "Undo", () => run(store.update(n, { deleted: false })));
 }
 
-function addNote(content) {
-  const noteDate = state.view === "day" && !state.query ? state.date : today();
-  run(store.create(content.slice(0, MAX_CONTENT), noteDate));
+function addNote(text, date) {
+  const noteDate = date || (state.view === "day" && !state.query ? state.date : today());
+  const { content, checklist } = parseChecklist(text.slice(0, MAX_CONTENT));
+  run(store.create(content, noteDate, checklist));
 }
 
 // ---------- screenshots ----------
@@ -708,8 +945,11 @@ store.onAuth((user, error) => {
   if (!user) return;
 
   renderAccount();
+  purged = false;
+  $("admin-link").hidden = true;
+  store.isAdmin?.().then((yes) => { $("admin-link").hidden = !yes; });
   stopNotes = store.subscribe(
-    (notes) => { Object.assign(state, { notes, loaded: true, loadError: null }); render(); },
+    (notes) => { Object.assign(state, { notes, loaded: true, loadError: null }); render(); purgeOldTrash(); },
     (e) => { state.loadError = friendly(e); render(); },
   );
   render();
@@ -728,13 +968,24 @@ $("sign-out").addEventListener("click", () => run(store.signOut()));
 
 // ---------- wiring ----------
 
+const growComposer = () => {
+  const input = $("composer-input");
+  input.style.height = "auto";
+  input.style.height = `${Math.min(input.scrollHeight, 220)}px`;
+};
 $("composer").addEventListener("submit", (e) => {
   e.preventDefault();
   const input = $("composer-input");
   const text = input.value.trim();
   if (!text) return;
   input.value = "";
+  growComposer();
   addNote(text);
+});
+$("composer-input").addEventListener("input", growComposer);
+$("composer-input").addEventListener("keydown", (e) => {
+  // Enter saves; Shift+Enter starts a new line (lines starting with "-" or "[ ]" become a checklist)
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); $("composer").requestSubmit(); }
 });
 
 let searchTimer;
@@ -748,9 +999,9 @@ $("search").addEventListener("keydown", (e) => {
 });
 
 $("jump").addEventListener("change", (e) => { if (e.target.value) go("day", e.target.value); });
-$("prev").addEventListener("click", () => go("day", addDays(state.date, -1)));
-$("next").addEventListener("click", () => go("day", addDays(state.date, 1)));
-$("go-today").addEventListener("click", () => go("day", today()));
+$("prev").addEventListener("click", () => (state.view === "week" ? go("week", addDays(state.week, -7)) : go("day", addDays(state.date, -1))));
+$("next").addEventListener("click", () => (state.view === "week" ? go("week", addDays(state.week, 7)) : go("day", addDays(state.date, 1))));
+$("go-today").addEventListener("click", () => (state.view === "week" ? go("week", today()) : go("day", today())));
 for (const btn of document.querySelectorAll(".nav-item")) {
   btn.addEventListener("click", () => go(btn.dataset.view === "today" ? "day" : btn.dataset.view, today()));
 }
@@ -771,6 +1022,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "/") { e.preventDefault(); $("search").focus(); }
   else if (e.key === "n") { e.preventDefault(); $("composer-input").focus(); }
   else if (e.key === "t") go("day", today());
+  else if (e.key === "w") go("week", today());
   else if (e.key === "ArrowLeft" && state.view === "day") go("day", addDays(state.date, -1));
   else if (e.key === "ArrowRight" && state.view === "day") go("day", addDays(state.date, 1));
 });

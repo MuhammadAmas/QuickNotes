@@ -7,7 +7,7 @@ import {
   signInWithPopup, signInWithRedirect, signOut,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
 import {
-  collection, deleteDoc, doc, getDoc, increment, initializeFirestore, memoryLocalCache, onSnapshot,
+  collection, deleteDoc, doc, getDoc, getDocs, increment, limit, initializeFirestore, memoryLocalCache, onSnapshot,
   persistentLocalCache, persistentMultipleTabManager, query, serverTimestamp, setDoc, updateDoc, where, writeBatch,
 } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 import { firebaseConfig, NOTES_COLLECTION, USERS_COLLECTION } from "./firebase-config.js";
@@ -112,7 +112,11 @@ export function createStore() {
     },
 
     // Writes show up locally at once (and offline); the promises settle when the server confirms.
-    create: (content, noteDate) => setDoc(doc(collection(firestore(), NOTES_COLLECTION)), newNote(user, content, noteDate)),
+    async create(content, noteDate, checklist = []) {
+      await setDoc(doc(collection(firestore(), NOTES_COLLECTION)), newNote(user, content, noteDate, checklist));
+      // per-person activity for the users dashboard; never blocks or fails the note itself
+      setDoc(doc(firestore(), USERS_COLLECTION, user.uid), { notesCreated: increment(1) }, { merge: true }).catch(() => {});
+    },
     update: (note, changes) => updateDoc(noteRef(note.id), patchFor(note, changes)),
     updateMany(list, changes) {
       const batch = writeBatch(firestore());
@@ -124,6 +128,7 @@ export function createStore() {
       for (const [note, order] of pairs) batch.update(noteRef(note.id), patchFor(note, { order }));
       return batch.commit();
     },
+    /** Permanently deletes a note (and its screenshot). Normal deleting moves it to Trash via update({deleted}). */
     remove(note) {
       if (!note.attachment?.id) return deleteDoc(noteRef(note.id));
       const batch = writeBatch(firestore()); // the screenshot goes with its note
@@ -137,6 +142,19 @@ export function createStore() {
       if (!snap.exists()) throw new Error("Screenshot not found");
       const a = snap.data();
       return `data:${a.mime};base64,${a.data}`;
+    },
+    /** Users dashboard: every profile, if the signed-in person is an admin (otherwise permission-denied). */
+    async listUsers() {
+      const snap = await getDocs(collection(firestore(), USERS_COLLECTION));
+      return snap.docs.map((d) => {
+        const u = d.data();
+        const ts = (v) => (v?.toDate ? v.toDate() : v ? new Date(v) : null);
+        return { ...u, createdAt: ts(u.createdAt), lastSignInAt: ts(u.lastSignInAt), lastSeenAt: ts(u.lastSeenAt),
+          clients: Object.fromEntries(Object.entries(u.clients || {}).map(([k, c]) => [k, { ...c, lastSeenAt: ts(c.lastSeenAt) }])) };
+      });
+    },
+    async isAdmin() {
+      try { await getDocs(query(collection(firestore(), USERS_COLLECTION), limit(2))); return true; } catch { return false; }
     },
     setSharing: (note, emails) => updateDoc(noteRef(note.id), { sharedWith: emails, updated_at: nowIso() }),
   };

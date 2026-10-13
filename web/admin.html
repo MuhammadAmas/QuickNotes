@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Users · QuickNotes</title>
+  <meta name="robots" content="noindex">
+  <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+  <script>
+    (function () {
+      try {
+        var t = localStorage.getItem("qn-theme");
+        if (t === "light" || t === "dark") document.documentElement.dataset.theme = t;
+      } catch (e) {}
+    })();
+  </script>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="admin-page">
+  <main class="content wide admin">
+    <header class="main-header">
+      <div class="heading">
+        <p class="eyebrow">Admin</p>
+        <h1>Users</h1>
+      </div>
+      <a class="pill back" href="./">← Back to notes</a>
+    </header>
+    <div id="admin-body"><p class="loading">Loading…</p></div>
+  </main>
+  <div class="toast" id="toast" role="status" hidden><span id="toast-text"></span></div>
+  <script type="module" src="admin.js"></script>
+</body>
+</html>

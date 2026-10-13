@@ -1,10 +1,20 @@
 rules_version = '2';
 
+// TEMPLATE: scripts/configure.py writes firestore.rules from this file, filling in
+// __ADMIN_EMAILS__ from "adminEmails" in quicknotes.config.json. Edit this file, not firestore.rules.
+
 // QuickNotes: each note belongs to its owner; the owner can share it with
 // other people by email. People it's shared with can tick, edit, move and reorder it,
-// but only the owner can delete it or change who it's shared with.
+// but only the owner can delete it (move it to Trash) or change who it's shared with.
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // people who can open the users dashboard (admin.html)
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email in [__ADMIN_EMAILS__];
+    }
 
     match /qn_notes/{noteId} {
       function signedIn() {
@@ -28,6 +38,8 @@ service cloud.firestore {
           && d.ownerId is string
           && d.sharedWith is list && d.sharedWith.size() <= 50
           && (!('order' in d) || d.order is number)
+          && (!('checklist' in d) || (d.checklist is list && d.checklist.size() <= 100))
+          && (!('deleted_at' in d) || d.deleted_at == null || d.deleted_at is string)
           && (!('attachment' in d) || (d.attachment is map && d.attachment.thumb is string
                                        && d.attachment.thumb.size() < 200000));
       }
@@ -41,7 +53,7 @@ service cloud.firestore {
         || (sharedWithMe(resource.data)
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
               'content', 'status', 'note_date', 'updated_at', 'edited_at',
-              'completed_at', 'original_date', 'times_moved', 'order'
+              'completed_at', 'original_date', 'times_moved', 'order', 'checklist'
             ]))
       );
 
@@ -83,14 +95,15 @@ service cloud.firestore {
         return d.uid == uid
           && d.keys().hasOnly([
             'uid', 'email', 'displayName', 'photoURL', 'providers', 'createdAt',
-            'lastSignInAt', 'lastSeenAt', 'visits', 'locale', 'timeZone', 'clients'
+            'lastSignInAt', 'lastSeenAt', 'visits', 'notesCreated', 'locale', 'timeZone', 'clients'
           ])
+          && (!('notesCreated' in d) || d.notesCreated is int)
           && (!('email' in d) || d.email is string)
           && (!('visits' in d) || d.visits is int)
           && (!('clients' in d) || d.clients is map);
       }
 
-      allow read: if ownProfile();
+      allow read: if ownProfile() || isAdmin();
       allow create, update: if ownProfile() && validProfile(request.resource.data);
       allow delete: if false;
     }

@@ -7,6 +7,7 @@ extension/config.js
 desktop/Config.swift
 .firebaserc
 firebase.json
+firestore.rules
 
 # private keys, certificates, credentials
 *.pem

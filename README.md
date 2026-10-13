@@ -30,8 +30,8 @@ Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>N</kbd>, type, hit <kbd>Enter</kbd>. Revi
 
 | | |
 |---|---|
-| **Mac bubble** <br><img src="docs/images/mac-quick-note.png" width="360" alt=""> | A glossy orange bubble floats over every app and Space. Press **⌘⇧N** or **⌃⌥N** anywhere (or click the bubble), type a note, press **Enter**: it's saved to *today* and your meeting app never loses focus. Shift+Enter adds a line. **Screenshot notes:** press **⌃⌥S** and drag over any area (Space for a whole window), or **⌃⌥F** for the full screen (the display your pointer is on). Both are also under 📷 in the box. Add a description, press Enter. Works offline; notes and screenshots sync when you're back online. |
-| **Web app** (desktop & phone) <br><img src="docs/images/phone-dark.png" width="180" alt=""> | Notes grouped by day. Tick them off, edit, **drag to set priority**, move unfinished ones to tomorrow (one by one or all at once), search, **share a note with teammates by email**, and open screenshot notes full size. Light/dark theme, installable on a phone's home screen, offline-capable, live sync. |
+| **Mac bubble** <br><img src="docs/images/mac-quick-note.png" width="360" alt=""> | A glossy orange bubble floats over every app and Space. Press **⌘⇧N** or **⌃⌥N** anywhere (or click the bubble), type a note, press **Enter**: it's saved to *today* and your meeting app never loses focus. Shift+Enter adds a line. **Screenshot notes:** press **⌃⌥S** and drag over any area (Space for a whole window), or **⌃⌥F** for the full screen (the display your pointer is on). Both are also under 📷 in the box. Add a description, press Enter. **Voice notes:** press **⌃⌥V** (or 🎤) and speak; it's typed as you talk (on-device where supported). **Daily reminders:** a card by the bubble at 9:00 (what's on today), 18:00 (what's left, with *Move all to tomorrow*) and Friday 17:00 (your week), each switchable in the bubble menu. Works offline; notes and screenshots sync when you're back online. |
+| **Web app** (desktop & phone) <br><img src="docs/images/phone-dark.png" width="180" alt=""> | Notes grouped by day. Tick them off, edit, **drag to set priority**, move unfinished ones to tomorrow (one by one or all at once), search, **share a note with teammates by email**, open screenshot notes full size, **checklists** inside a note (type lines starting with `-` or `[ ]`), a **Week** view (drag notes between days), a **Weekly summary** (done vs added, what keeps slipping) and **Trash** (30-day restore). Admins also get a **users dashboard**. Light/dark theme, installable on a phone's home screen, offline-capable, live sync. |
 | **Chrome extension** <br><img src="docs/images/chrome-popup.png" width="240" alt=""> | Toolbar popup (**⌥⇧N**) to add a note for today (optionally with a **screenshot of the current tab**) and tick off today's list. Right-click selected text, a link or a page → **Save to QuickNotes**. The icon badge shows today's open count. |
 
 Everyone signs in with Google; the same notes appear everywhere.
@@ -72,12 +72,16 @@ QuickNotes/
 │   ├── store-demo.js        # in-memory data for ?demo on localhost
 │   ├── notes-model.js       # note shape + edit rules shared by both stores
 │   ├── firebase-config.js   # generated from quicknotes.config.json (git-ignored)
+│   ├── charts.js            # small bar charts (weekly summary, users dashboard)
+│   ├── admin.html, admin.js # users dashboard (admins only)
 │   ├── link.html, link.js   # sign-in page used by the Mac app & extension
 │   └── manifest.webmanifest, icons/     # installable web app
 ├── desktop/                 # macOS app (Swift / AppKit, no Xcode project needed)
 │   ├── main.swift           # bubble, hotkeys, menus, app lifecycle
 │   ├── Capture.swift        # the quick-note box
 │   ├── Screenshot.swift     # screen selection + JPEG compression for screenshot notes
+│   ├── Voice.swift          # voice notes (Speech framework)
+│   ├── Reminders.swift      # 9:00 / 18:00 / Friday reminder cards
 │   ├── Cloud.swift          # sign-in, Firestore REST, offline queue
 │   ├── Config.swift         # generated from quicknotes.config.json (git-ignored)
 │   ├── BubbleArt.swift      # bubble drawing (also used for the app icon)
@@ -90,7 +94,7 @@ QuickNotes/
 │   └── config.js            # generated from quicknotes.config.json (git-ignored)
 ├── quicknotes.config.example.json   # template → copy to quicknotes.config.json (git-ignored)
 ├── scripts/configure.py     # writes each app's config + firebase.json/.firebaserc from it
-├── firestore.rules          # database security rules
+├── firestore.rules.template # database security rules (admin emails filled in by configure.py)
 ├── build.sh                 # builds the Mac app (+ extension zip); `install` installs both
 ├── deploy.sh                # deploys the web app + rules to Firebase
 ├── media/                   # tooling that generates the demo video
@@ -122,12 +126,13 @@ cp quicknotes.config.example.json quicknotes.config.json
                 "storageBucket": "…", "messagingSenderId": "…", "appId": "…" },
   "webURL": "https://<site-id>.web.app/",        // where "Open all notes" goes
   "hostingSites": ["<site-id>"],                 // sites to deploy web/ to (the project's default site is always added)
-  "extensionId": "jnndhbjfdfhoifgefnijcbglfilbjfia"  // Chrome extension allowed to receive sign-ins
+  "extensionId": "jnndhbjfdfhoifgefnijcbglfilbjfia", // Chrome extension allowed to receive sign-ins
+  "adminEmails": ["you@example.com"]             // who can open the users dashboard (/admin)
 }
 ```
 
 - Get the `firebase` values from Firebase console → **Project settings → Your apps → Web app → SDK setup and configuration**. For the existing QuickNotes project, ask the project owner for the file.
-- `scripts/configure.py` turns it into `web/firebase-config.js`, `extension/config.js`, `desktop/Config.swift`, `firebase.json` and `.firebaserc`. All of those are git-ignored too. `build.sh` and `deploy.sh` run it automatically; after editing the config, run `python3 scripts/configure.py` (or just build/deploy again).
+- `scripts/configure.py` turns it into `web/firebase-config.js`, `extension/config.js`, `desktop/Config.swift`, `firebase.json`, `.firebaserc` and `firestore.rules` (from `firestore.rules.template` plus your `adminEmails`). All of those are git-ignored too. `build.sh` and `deploy.sh` run it automatically; after editing the config, run `python3 scripts/configure.py` (or just build/deploy again).
 - `.gitignore` also blocks private keys and certificates (`*.pem`, `*.p12`, …), `.env` files, service-account JSON and local sign-in files, so they can't be committed by accident.
 
 > A website's Firebase config is visible to anyone who opens it; that's how Firebase web apps work. Keeping it out of Git stops it being scraped from GitHub, but what actually protects your data is [`firestore.rules`](firestore.rules). For extra safety, restrict the API key (see [Data model & security](#data-model--security)).
@@ -235,6 +240,8 @@ Put the new ID in `extensionId` in `quicknotes.config.json` and redeploy. A Chro
 | `created_at`, `updated_at`, `edited_at`, `completed_at` | ISO timestamps |
 | `original_date`, `times_moved` | set when a note is moved to another day |
 | `sharedWith` | emails the note is shared with |
+| `checklist` | optional list of `{ id, text, done }` items |
+| `deleted_at` | set when the note is in Trash (it's removed for good 30 days later); `null` otherwise |
 | `attachment` | screenshot notes only: `{ id, kind: "screenshot", width, height, thumb }`; `thumb` is a small JPEG data URL |
 
 **`qn_attachments/{id}`**: the full screenshot for a note (`ownerId`, `noteId`, `mime`, `data` = base64 JPEG, `width`, `height`, `created_at`). Screenshots are scaled to at most 2400 px and compressed to under ~700 KB so they fit a Firestore document, which keeps them on the free plan (no Cloud Storage needed). They live outside the note so the notes list stays fast, and are loaded only when opened. Deleting a note deletes its screenshot.
@@ -246,12 +253,15 @@ Put the new ID in `extensionId` in `quicknotes.config.json` and redeploy. A Chro
 | `uid`, `email`, `displayName`, `photoURL`, `providers` | identity |
 | `createdAt`, `lastSignInAt`, `lastSeenAt` | sign-up, last sign-in, last use |
 | `visits` | number of times the web app has been opened |
+| `notesCreated` | number of notes the person has created (any app) |
 | `locale`, `timeZone` | |
 | `clients.web` / `clients.mac` / `clients.chrome` | per-app last use, version and device details |
 
 **Rules** ([`firestore.rules`](firestore.rules)):
 - A note can be read by its owner and the people in `sharedWith`. Those people can tick, edit, move and reorder it; only the owner can delete it or change who it's shared with.
 - A screenshot (`qn_attachments`) can be read by its note's owner and the people the note is shared with; only the owner can create or delete it.
+- The **users dashboard** (`/admin`) reads every `users` document, which only the `adminEmails` in your config may do. It shows sign-ups, activity, apps used and note counts, never anyone's notes.
+- People a note is shared with can't move it to Trash; only the owner can.
 - A person can read and write **only their own** `users` document, and only the fields listed above. Anything you add later (e.g. `plan`, `role`) can therefore only be set by an admin.
 - Everything else in the database is closed.
 
@@ -290,6 +300,9 @@ Edit the narration in `media/voiceover.txt` (one line per scene). Use another in
 | Notes typed in the bubble don't appear | Right-click the bubble. It shows whether you're signed in and how many notes are waiting to sync; they upload automatically when you're back online. |
 | Old icon in the Dock | macOS caches icons; quit and reopen QuickNotes. |
 | `swiftc: command not found` | `xcode-select --install` |
+| Voice notes say "Allow Microphone / Speech Recognition" | Turn QuickNotes on in System Settings → Privacy & Security → **Microphone** and **Speech Recognition**. |
+| The users dashboard says "Admins only" | Add your email to `adminEmails` in `quicknotes.config.json` and run `./deploy.sh`. |
+| Reminders don't appear | Right-click the bubble → **Daily Reminders**: check they're on, or use "Show … now". They appear only while QuickNotes is running and you're signed in. |
 | **"Missing quicknotes.config.json"** | `cp quicknotes.config.example.json quicknotes.config.json` and fill it in. |
 | A build or deploy uses old project values | Run `python3 scripts/configure.py` (build/deploy do this automatically). |
 | **Uninstall** | Quit QuickNotes; delete `~/Applications/QuickNotes.app`, `~/Applications/QuickNotes Chrome Extension` and `~/Library/Application Support/QuickNotes`; remove the extension in `chrome://extensions`. |

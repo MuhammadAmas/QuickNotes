@@ -118,6 +118,7 @@ kbd {
   color: var(--accent); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; cursor: pointer;
 }
 .note.done .text a.link { color: inherit; }
+.note .text .progress { color: var(--faint); font-size: 12px; white-space: nowrap; }
 .note.done .text { color: var(--faint); text-decoration: line-through; }
 .check {
   flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-top: 1px;

@@ -52,9 +52,54 @@ private func fsValue(_ value: Any?) -> [String: Any] {
     case let i as Int: return ["integerValue": String(i)]
     case let d as Double: return ["doubleValue": d]
     case let a as [String]: return ["arrayValue": a.isEmpty ? [:] : ["values": a.map { ["stringValue": $0] }]]
+    case let a as [[String: Any?]]: return ["arrayValue": a.isEmpty ? [:] : ["values": a.map { fsValue($0) }]]
     case let m as [String: Any?]: return ["mapValue": ["fields": m.mapValues { fsValue($0) }]]
     default: return ["nullValue": NSNull()]
     }
+}
+
+/// Firestore REST value → plain Swift value (strings, numbers, nil, arrays, maps).
+private func fsDecode(_ v: [String: Any]) -> Any? {
+    if let s = v["stringValue"] as? String { return s }
+    if let i = v["integerValue"] as? String { return Int(i) }
+    if let d = v["doubleValue"] as? Double { return d }
+    if let b = v["booleanValue"] as? Bool { return b }
+    if let a = (v["arrayValue"] as? [String: Any]) { return (a["values"] as? [[String: Any]] ?? []).map { fsDecode($0) } }
+    if let m = (v["mapValue"] as? [String: Any])?["fields"] as? [String: [String: Any]] { return m.mapValues { fsDecode($0) } }
+    return nil
+}
+
+/// A note as the Mac app needs it for reminders.
+struct NoteInfo {
+    let id: String
+    let content: String
+    let noteDate: String
+    let status: String
+    let createdAt: String?
+    let completedAt: String?
+    let originalDate: String?
+    let timesMoved: Int
+}
+
+/// Same rules as web/notes-model.js: "- item", "[ ] item", "[x] item" lines become a checklist.
+func parseChecklist(_ text: String) -> (content: String, checklist: [[String: Any?]]) {
+    let pattern = #"^\s*(?:[-*•]\s*)?\[\s*([xX✓]?)\s*\]\s+(.+)$|^\s*[-*•]\s+(.+)$"#
+    guard let re = try? NSRegularExpression(pattern: pattern) else { return (text, []) }
+    var items: [[String: Any?]] = []
+    var rest: [String] = []
+    for line in text.components(separatedBy: "\n") {
+        let ns = line as NSString
+        if let m = re.firstMatch(in: line, range: NSRange(location: 0, length: ns.length)) {
+            let r2 = m.range(at: 2), r3 = m.range(at: 3)
+            let itemText = (r2.location != NSNotFound ? ns.substring(with: r2) : ns.substring(with: r3)).trimmingCharacters(in: .whitespaces)
+            let done = m.range(at: 1).location != NSNotFound && m.range(at: 1).length > 0
+            items.append(["id": String(UUID().uuidString.prefix(8)).lowercased(), "text": String(itemText.prefix(500)), "done": done])
+        } else if !line.trimmingCharacters(in: .whitespaces).isEmpty {
+            rest.append(line.trimmingCharacters(in: .whitespaces))
+        }
+    }
+    if items.isEmpty { return (text, []) }
+    return (rest.isEmpty ? "Checklist" : rest.joined(separator: "\n"), Array(items.prefix(100)))
 }
 
 final class Cloud: NSObject, ASWebAuthenticationPresentationContextProviding {
@@ -230,18 +275,81 @@ final class Cloud: NSObject, ASWebAuthenticationPresentationContextProviding {
             ]]
             self.request("POST", "documents:runQuery", token: token, body: query) { status, json in
                 guard status == 200, let rows = json as? [[String: Any]] else { return done(nil) }
-                done(rows.filter { $0["document"] != nil }.count)
+                // notes in Trash don't count
+                done(rows.compactMap { $0["document"] as? [String: Any] }.filter { doc in
+                    let fields = doc["fields"] as? [String: [String: Any]] ?? [:]
+                    return fields["deleted_at"].flatMap { fsDecode($0) } == nil
+                }.count)
             }
         }
     }
 
+    /// All of the signed-in person's notes (not in Trash), for reminders and the weekly recap.
+    func myNotes(_ done: @escaping ([NoteInfo]?) -> Void) {
+        withIdToken { result in
+            guard case .success(let token) = result, let uid = self.session?.uid else { return done(nil) }
+            let query: [String: Any] = ["structuredQuery": [
+                "from": [["collectionId": CloudConfig.collection]],
+                "where": ["fieldFilter": ["field": ["fieldPath": "ownerId"], "op": "EQUAL", "value": ["stringValue": uid]]],
+            ]]
+            self.request("POST", "documents:runQuery", token: token, body: query, timeout: 20) { status, json in
+                guard status == 200, let rows = json as? [[String: Any]] else { return done(nil) }
+                let notes = rows.compactMap { row -> NoteInfo? in
+                    guard let doc = row["document"] as? [String: Any], let name = doc["name"] as? String else { return nil }
+                    let f = (doc["fields"] as? [String: [String: Any]] ?? [:]).mapValues { fsDecode($0) }
+                    if f["deleted_at"].flatMap({ $0 }) != nil { return nil }
+                    return NoteInfo(id: String(name.split(separator: "/").last ?? ""),
+                                    content: f["content"].flatMap { $0 as? String } ?? "",
+                                    noteDate: f["note_date"].flatMap { $0 as? String } ?? "",
+                                    status: f["status"].flatMap { $0 as? String } ?? "open",
+                                    createdAt: f["created_at"].flatMap { $0 as? String },
+                                    completedAt: f["completed_at"].flatMap { $0 as? String },
+                                    originalDate: f["original_date"].flatMap { $0 as? String },
+                                    timesMoved: f["times_moved"].flatMap { $0 as? Int } ?? 0)
+                }
+                done(notes)
+            }
+        }
+    }
+
+    /// Moves notes to another day in one batch (same fields the web app writes).
+    func move(_ notes: [NoteInfo], to day: String, _ done: @escaping (Bool) -> Void) {
+        guard !notes.isEmpty else { return done(true) }
+        withIdToken { result in
+            guard case .success(let token) = result else { return done(false) }
+            let base = "projects/\(CloudConfig.projectId)/databases/(default)/documents/\(CloudConfig.collection)/"
+            let now = isoTimestamp()
+            let writes: [[String: Any]] = notes.map { n in
+                let fields: [String: Any?] = ["note_date": day, "original_date": n.originalDate ?? n.noteDate,
+                                              "times_moved": n.timesMoved + 1, "updated_at": now]
+                return ["update": ["name": base + n.id, "fields": fields.mapValues { fsValue($0) }],
+                        "updateMask": ["fieldPaths": Array(fields.keys)]]
+            }
+            self.request("POST", "documents:commit", token: token, body: ["writes": writes]) { status, _ in done(status == 200) }
+        }
+    }
+
+    /// users/{uid}.notesCreated += 1, for the users dashboard. Never affects the note itself.
+    private func countNoteCreated() {
+        withIdToken { result in
+            guard case .success(let token) = result, let uid = self.session?.uid else { return }
+            let doc = "projects/\(CloudConfig.projectId)/databases/(default)/documents/users/\(uid)"
+            let body: [String: Any] = ["writes": [["transform": ["document": doc, "fieldTransforms": [
+                ["fieldPath": "notesCreated", "increment": ["integerValue": "1"]],
+            ]]]]]
+            self.request("POST", "documents:commit", token: token, body: body) { _, _ in }
+        }
+    }
+
     private func upload(_ note: PendingNote, _ done: @escaping (String?) -> Void) {
+        let parsed = parseChecklist(note.content)
         var fields: [String: Any?] = [
-            "content": note.content, "note_date": note.noteDate, "status": "open",
+            "content": parsed.content, "note_date": note.noteDate, "status": "open",
             "created_at": note.createdAt, "updated_at": note.createdAt,
             "edited_at": nil, "completed_at": nil, "original_date": nil, "times_moved": 0,
             "order": Int(Date().timeIntervalSince1970 * 1000), // bottom of the day's list, same scale as the web app
         ]
+        if !parsed.checklist.isEmpty { fields["checklist"] = parsed.checklist }
         guard let shot = note.shot else { return createDocument(id: note.id, fields: fields, done) }
 
         let file = shotsDir.appendingPathComponent("\(shot.id).jpg")
@@ -292,6 +400,7 @@ final class Cloud: NSObject, ASWebAuthenticationPresentationContextProviding {
             let body: [String: Any] = ["fields": all.mapValues { fsValue($0) }]
             let path = "documents/\(CloudConfig.collection)?documentId=\(id)"
             self.request("POST", path, token: token, body: body) { status, json in
+                if status == 200 { self.countNoteCreated() }
                 if status == 200 || status == 409 { return done(nil) }
                 let message = ((json as? [String: Any])?["error"] as? [String: Any])?["message"] as? String
                 done(message ?? "HTTP \(status)")

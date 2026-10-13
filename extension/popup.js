@@ -147,6 +147,13 @@ function renderNotes() {
     const text = document.createElement("span");
     text.className = "text";
     setLinkedText(text, n.content);
+    const items = n.checklist || [];
+    if (items.length) {
+      const progress = document.createElement("span");
+      progress.className = "progress";
+      progress.textContent = ` ☑ ${items.filter((i) => i.done).length}/${items.length}`;
+      text.append(progress);
+    }
     if (n.ownerName && n.ownerId !== currentUid) text.title = `From ${n.ownerName}`;
 
     li.append(check, text);

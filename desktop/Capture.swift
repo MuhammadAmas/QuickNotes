@@ -128,6 +128,9 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     private var previewHeight: NSLayoutConstraint!
     private var previewGap: NSLayoutConstraint!
     private(set) var screenshot: Screenshot?
+    private let voice = VoiceDictation()
+    private let mic = NSButton()
+    private var dictationBase = ""
     private static let previewSize: CGFloat = 170
     private var closeTimer: Timer?
     private var saving = false
@@ -210,6 +213,16 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         ])
         camera.toolTip = "Add a screenshot: an area (⌃⌥S) or the full screen (⌃⌥F)"
 
+        mic.isBordered = false
+        mic.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice note")?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
+        mic.contentTintColor = Palette.accent
+        mic.target = self
+        mic.action = #selector(micClicked)
+        mic.toolTip = "Voice note: speak and it’s typed for you (⌃⌥V)"
+        voice.onText = { [weak self] text in self?.showDictated(text) }
+        voice.onStop = { [weak self] error in self?.dictationEnded(error) }
+
         // screenshot preview, shown above the text when one is attached
         previewImage.imageScaling = .scaleProportionallyUpOrDown
         // a 2000px screenshot must not stretch the box: let the preview shrink to fit
@@ -230,7 +243,7 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         hints.spacing = 12
         status.isHidden = true
 
-        for v in [mark, glyph, title, chip, dateChip, well, field, open, camera, hints, status, previewBox, previewImage, remove] as [NSView] {
+        for v in [mark, glyph, title, chip, dateChip, well, field, open, camera, mic, hints, status, previewBox, previewImage, remove] as [NSView] {
             v.translatesAutoresizingMaskIntoConstraints = false
         }
         mark.addSubview(glyph)
@@ -238,7 +251,7 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         well.addSubview(field)
         previewBox.addSubview(previewImage)
         previewBox.addSubview(remove)
-        for v in [mark, title, chip, previewBox, well, open, camera, hints, status] as [NSView] { card.addSubview(v) }
+        for v in [mark, title, chip, previewBox, well, open, camera, mic, hints, status] as [NSView] { card.addSubview(v) }
 
         let inset = CaptureController.fieldInset
         wellHeight = well.heightAnchor.constraint(equalToConstant: 46)
@@ -286,6 +299,8 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
             open.heightAnchor.constraint(equalToConstant: 24),
             camera.leadingAnchor.constraint(equalTo: open.trailingAnchor, constant: 14),
             camera.centerYAnchor.constraint(equalTo: open.centerYAnchor),
+            mic.leadingAnchor.constraint(equalTo: camera.trailingAnchor, constant: 12),
+            mic.centerYAnchor.constraint(equalTo: open.centerYAnchor),
             hints.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
             hints.centerYAnchor.constraint(equalTo: open.centerYAnchor),
             status.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -16),
@@ -323,6 +338,7 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
 
     func hide() {
         closeTimer?.invalidate()
+        if voice.isListening { voice.stop() }
         guard panel.isVisible else { return }
         NSAnimationContext.runAnimationGroup({ ctx in
             ctx.duration = 0.12
@@ -402,6 +418,48 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
         hints.isHidden = true
     }
 
+    // MARK: voice notes
+
+    @objc private func micClicked() { toggleDictation() }
+
+    /// Starts or stops dictation into the text box (the ⌃⌥V shortcut and the 🎤 button).
+    func toggleDictation() {
+        if voice.isListening { return voice.stop() }
+        closeTimer?.invalidate()
+        let current = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
+        dictationBase = current.isEmpty ? "" : current + " "
+        well.stroke = Palette.danger
+        mic.contentTintColor = Palette.danger
+        mic.image = NSImage(systemSymbolName: "stop.circle.fill", accessibilityDescription: "Stop")?
+            .withSymbolConfiguration(.init(pointSize: 14, weight: .semibold))
+        showStatus("●  Listening… ⌃⌥V or Enter to stop", color: Palette.danger)
+        voice.start()
+    }
+
+    private func showDictated(_ text: String) {
+        let full = dictationBase + text
+        if let editor = field.currentEditor() as? NSTextView {
+            editor.string = full
+            editor.setSelectedRange(NSRange(location: (full as NSString).length, length: 0))
+        } else {
+            field.stringValue = full
+        }
+        fitToText(keepTop: true)
+    }
+
+    private func dictationEnded(_ error: String?) {
+        mic.contentTintColor = Palette.accent
+        mic.image = NSImage(systemSymbolName: "mic.fill", accessibilityDescription: "Voice note")?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
+        if let error {
+            well.stroke = Palette.danger
+            showStatus(error, color: Palette.danger)
+        } else if !saving {
+            showHints()
+        }
+        panel.makeFirstResponder(field)
+    }
+
     // MARK: screenshot
 
     /// Shows the box with a screenshot attached, ready for an optional description.
@@ -466,6 +524,12 @@ final class CaptureController: NSObject, NSTextFieldDelegate, NSWindowDelegate {
     }
 
     private func save() {
+        if voice.isListening {
+            // Enter while speaking: stop, wait for the last words, then save
+            voice.stop()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in self?.save() }
+            return
+        }
         let text = currentText.trimmingCharacters(in: .whitespacesAndNewlines)
         let shot = screenshot
         guard !text.isEmpty || shot != nil else { return hide() }

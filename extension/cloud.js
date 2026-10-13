@@ -116,6 +116,32 @@ async function api(method, path, body) {
 
 // ---------- notes ----------
 
+// same rules as web/notes-model.js: "- item" / "[ ] item" / "[x] item" lines become a checklist
+const LIST_LINE = /^\s*(?:[-*•]\s*)?\[\s*([xX✓]?)\s*\]\s+(.+)$|^\s*[-*•]\s+(.+)$/;
+function parseChecklist(text) {
+  const items = [];
+  const rest = [];
+  for (const line of text.split("\n")) {
+    const m = line.match(LIST_LINE);
+    if (m) items.push({ id: Math.random().toString(36).slice(2, 10), text: (m[2] || m[3]).trim().slice(0, 500), done: Boolean(m[1]) });
+    else if (line.trim()) rest.push(line.trim());
+  }
+  if (!items.length) return { content: text.trim(), checklist: [] };
+  return { content: rest.join("\n") || "Checklist", checklist: items.slice(0, 100) };
+}
+
+/** Bumps users/{uid}.notesCreated for the users dashboard; never fails the note itself. */
+function countNoteCreated(uid) {
+  return api("POST", ":commit", {
+    writes: [{
+      transform: {
+        document: `projects/${CONFIG.projectId}/databases/(default)/documents/users/${uid}`,
+        fieldTransforms: [{ fieldPath: "notesCreated", increment: { integerValue: "1" } }],
+      },
+    }],
+  }).catch(() => {});
+}
+
 /**
  * Saves a note for a day. `shot` (optional) is a screenshot: { full, thumb, width, height }, where
  * `full`/`thumb` are JPEG data: URLs. The full image goes to qn_attachments; the note keeps the thumbnail.
@@ -125,12 +151,14 @@ export async function addNote(content, noteDate = today(), shot = null) {
   const s = await getSession();
   const ts = new Date().toISOString();
   const noteId = crypto.randomUUID();
+  const parsed = parseChecklist((content || "").slice(0, 10000));
   const fields = {
     ownerId: s.uid, ownerEmail: s.email, ownerName: s.name,
-    content: (content || (shot ? "Screenshot" : "")).slice(0, 10000), note_date: noteDate, status: "open",
+    content: parsed.content || (shot ? "Screenshot" : ""), note_date: noteDate, status: "open",
     created_at: ts, updated_at: ts, edited_at: null, completed_at: null,
     original_date: null, times_moved: 0, sharedWith: [], order: Date.now(),
   };
+  if (parsed.checklist.length) fields.checklist = parsed.checklist;
   if (shot) {
     const shotId = crypto.randomUUID();
     await api("POST", `/qn_attachments?documentId=${shotId}`, {
@@ -142,6 +170,7 @@ export async function addNote(content, noteDate = today(), shot = null) {
     fields.attachment = { id: shotId, kind: "screenshot", width: shot.width, height: shot.height, thumb: shot.thumb };
   }
   const doc = await api("POST", `/${CONFIG.collection}?documentId=${noteId}`, { fields: encFields(fields) });
+  countNoteCreated(s.uid);
   return fromDoc(doc);
 }
 
@@ -161,7 +190,7 @@ export async function notesOn(day) {
   for (const row of [...own, ...shared]) {
     if (!row.document) continue;
     const note = fromDoc(row.document);
-    if (note.note_date === day) byId.set(note.id, note);
+    if (note.note_date === day && !note.deleted_at) byId.set(note.id, note); // skip notes in Trash
   }
   return [...byId.values()].sort((a, b) => rank(a) - rank(b));
 }

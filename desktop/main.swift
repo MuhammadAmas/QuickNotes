@@ -133,7 +133,7 @@ final class BubbleView: NSView {
 
 // MARK: - Global hotkeys (⌘⇧N / ⌃⌥N note, ⌃⌥S area / ⌃⌥F full-screen screenshot), via Carbon so no Accessibility permission is needed
 
-enum HotKey: UInt32 { case note = 1, noteAlt = 2, screenshot = 3, fullScreenshot = 4 }
+enum HotKey: UInt32 { case note = 1, noteAlt = 2, screenshot = 3, fullScreenshot = 4, voice = 5 }
 var hotKeyAction: ((HotKey) -> Void)?
 
 func registerHotKeys() {
@@ -152,6 +152,7 @@ func registerHotKeys() {
         (.note, kVK_ANSI_N, cmdKey | shiftKey, "⌘⇧N"),
         (.screenshot, kVK_ANSI_S, controlKey | optionKey, "⌃⌥S"),
         (.fullScreenshot, kVK_ANSI_F, controlKey | optionKey, "⌃⌥F"),
+        (.voice, kVK_ANSI_V, controlKey | optionKey, "⌃⌥V"),
     ]
     for (key, code, modifiers, label) in shortcuts {
         var ref: EventHotKeyRef?
@@ -167,6 +168,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     let cloud = Cloud()
     lazy var capture = CaptureController(cloud: cloud)
     let bubble = BubblePanel(size: 80)
+    lazy var reminders = ReminderCenter(cloud: cloud) { [weak self] in
+        guard let self, self.bubble.isVisible else { return nil }
+        return self.bubble.frame
+    }
     var bubbleView: BubbleView!
     private var retryTimer: Timer?
 
@@ -190,6 +195,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             switch key {
             case .screenshot: self?.takeScreenshot(.area)
             case .fullScreenshot: self?.takeScreenshot(.fullScreen)
+            case .voice: self?.voiceNote()
             case .note, .noteAlt: self?.toggleCapture()
             }
         }
@@ -200,6 +206,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         // anything saved while offline or signed out goes up as soon as it can
         retryTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in self?.cloud.flushPending() }
+
+        reminders.onOpenNotes = { route in
+            NSWorkspace.shared.open(URL(string: CloudConfig.webURL.absoluteString + route) ?? CloudConfig.webURL)
+        }
+        reminders.start()
 
         NSLog("QuickNotes: screen recording permission \(ScreenshotTaker.hasPermission ? "granted" : "not granted")")
 
@@ -263,6 +274,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func newNote() { toggleCapture() }
+
+    /// ⌃⌥V: opens the note box if needed and starts (or stops) dictation.
+    @objc func voiceNote() {
+        if !capture.isVisible { capture.show(near: bubble.isVisible ? bubble.frame : nil) }
+        capture.toggleDictation()
+    }
+
+    @objc func toggleReminder(_ sender: NSMenuItem) {
+        guard let kind = ReminderKind(rawValue: sender.representedObject as? String ?? "") else { return }
+        reminders.toggle(kind)
+    }
+
+    @objc func showReminderNow(_ sender: NSMenuItem) {
+        guard let kind = ReminderKind(rawValue: sender.representedObject as? String ?? "") else { return }
+        reminders.show(kind)
+    }
 
     // MARK: screenshot notes
 
@@ -381,6 +408,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func buildBubbleMenu(includeQuit: Bool = true) -> NSMenu {
         let menu = NSMenu()
         menu.addItem(withTitle: "New Note   ⌘⇧N  or  ⌃⌥N", action: #selector(newNote), keyEquivalent: "")
+        menu.addItem(withTitle: "Voice Note   ⌃⌥V", action: #selector(voiceNote), keyEquivalent: "")
         menu.addItem(withTitle: "Screenshot of Area   ⌃⌥S", action: #selector(takeAreaScreenshot), keyEquivalent: "")
         menu.addItem(withTitle: "Screenshot of Full Screen   ⌃⌥F", action: #selector(takeFullScreenshot), keyEquivalent: "")
         if ScreenshotTaker.hasPermission {
@@ -400,6 +428,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(withTitle: "Sign In with Google…", action: #selector(signIn), keyEquivalent: "")
         }
         menu.addItem(.separator())
+        let remindersItem = menu.addItem(withTitle: "Daily Reminders", action: nil, keyEquivalent: "")
+        let sub = NSMenu()
+        for kind in ReminderKind.allCases {
+            let item = sub.addItem(withTitle: kind.title, action: #selector(toggleReminder(_:)), keyEquivalent: "")
+            item.representedObject = kind.rawValue
+            item.state = reminders.isEnabled(kind) ? .on : .off
+            item.target = self
+        }
+        sub.addItem(.separator())
+        for kind in ReminderKind.allCases {
+            let item = sub.addItem(withTitle: "Show \(kind.title.components(separatedBy: " (").first!.lowercased()) now",
+                                   action: #selector(showReminderNow(_:)), keyEquivalent: "")
+            item.representedObject = kind.rawValue
+            item.target = self
+        }
+        remindersItem.submenu = sub
         let swing = menu.addItem(withTitle: "Swing", action: #selector(toggleSwing), keyEquivalent: "")
         swing.state = UserDefaults.standard.bool(forKey: Defaults.swing) ? .on : .off
         menu.addItem(withTitle: bubble.isVisible ? "Hide Bubble" : "Show Bubble", action: #selector(toggleBubble), keyEquivalent: "")

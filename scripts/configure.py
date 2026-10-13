@@ -76,6 +76,14 @@ enum CloudConfig {{
 }}
 """)
 
+# security rules: the template plus the admin list (people who can open the users dashboard)
+admins = [e.strip().lower() for e in cfg.get("adminEmails", []) if e.strip()]
+rules = (ROOT / "firestore.rules.template").read_text()
+rules = rules.replace("// TEMPLATE: scripts/configure.py writes firestore.rules from this file, filling in\n"
+                      "// __ADMIN_EMAILS__ from \"adminEmails\" in quicknotes.config.json. Edit this file, not firestore.rules.\n",
+                      f"// {HEADER}\n// Edit firestore.rules.template instead.\n")
+write("firestore.rules", rules.replace("__ADMIN_EMAILS__", ", ".join(json.dumps(e) for e in admins)))
+
 write(".firebaserc", json.dumps({"projects": {"default": project}}, indent=2) + "\n")
 
 # Deploy config: the same web/ folder goes to every hosting site. The project's default

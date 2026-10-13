@@ -14,6 +14,10 @@
     <key>NSPrincipalClass</key>           <string>NSApplication</string>
     <key>NSHighResolutionCapable</key>    <true/>
     <key>NSHumanReadableCopyright</key>   <string>Personal notes app</string>
+    <key>NSMicrophoneUsageDescription</key>
+    <string>QuickNotes listens only while you record a voice note, to type what you say.</string>
+    <key>NSSpeechRecognitionUsageDescription</key>
+    <string>QuickNotes turns your voice notes into text (on your Mac when possible).</string>
     <key>NSAppTransportSecurity</key>
     <dict>
         <key>NSAllowsLocalNetworking</key> <true/>

@@ -13,7 +13,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$TMP"
 
 echo "• compiling desktop app"
 swiftc -O -swift-version 5 -target "$(uname -m)-apple-macos13.0" \
-  -o "$APP/Contents/MacOS/QuickNotes" desktop/main.swift desktop/Capture.swift desktop/Cloud.swift desktop/BubbleArt.swift desktop/Screenshot.swift desktop/Config.swift
+  -o "$APP/Contents/MacOS/QuickNotes" desktop/main.swift desktop/Capture.swift desktop/Cloud.swift desktop/BubbleArt.swift desktop/Screenshot.swift desktop/Reminders.swift desktop/Voice.swift desktop/Config.swift
 
 echo "• app icon"
 swiftc -O -o "$TMP/make_icon" desktop/icon/main.swift desktop/BubbleArt.swift
@@ -28,7 +28,10 @@ iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
 
 cp desktop/Info.plist "$APP/Contents/Info.plist"
 
-codesign --force --deep --sign - "$APP" >/dev/null
+# Ad-hoc signature with an identifier-based requirement: macOS privacy permissions (Screen Recording,
+# Microphone, Speech Recognition) are tied to "local.quicknotes.app" rather than to one exact build,
+# so they survive rebuilds. A Developer ID certificate is the proper fix for distributing the app.
+codesign --force --deep --sign - -r='designated => identifier "local.quicknotes.app"' "$APP" >/dev/null
 rm -rf "$TMP"
 echo "✓ built $APP"
 

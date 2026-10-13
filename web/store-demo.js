@@ -1,7 +1,25 @@
 // In-memory store for trying the UI locally without signing in:
 // http://localhost:<port>/?demo  (only enabled on localhost).
 
-import { newNote, patchFor, nowIso } from "./notes-model.js";
+import { checklistItem, newNote, patchFor, nowIso } from "./notes-model.js";
+
+const ago = (days) => new Date(Date.now() - days * 86400000).toISOString();
+
+function demoUsers() {
+  const names = ["You", "Priya Nair", "Sam Lee", "Aisha Khan", "Omar Siddiqui", "Lena Ortiz", "Tom Becker", "Mei Chen"];
+  return names.map((name, i) => {
+    const joined = new Date(Date.now() - (i * 3 + 1) * 86400000 * 1.7);
+    const seen = new Date(Date.now() - (i % 4) * 86400000 * (i > 5 ? 9 : 1) - i * 3600000);
+    const clients = { web: { lastSeenAt: seen, mobile: i % 3 === 0 } };
+    if (i % 2 === 0) clients.mac = { lastSeenAt: seen, version: "1.0" };
+    if (i % 3 !== 2) clients.chrome = { lastSeenAt: seen, version: "1.2.0" };
+    return {
+      uid: `demo-${i}`, displayName: name, email: `${name.split(" ")[0].toLowerCase()}@example.com`, photoURL: "",
+      createdAt: joined, lastSignInAt: seen, lastSeenAt: seen, visits: 40 - i * 4, notesCreated: 60 - i * 7,
+      locale: "en-US", timeZone: i % 2 ? "Asia/Karachi" : "Europe/London", clients,
+    };
+  });
+}
 
 const pad = (n) => String(n).padStart(2, "0");
 const day = (offset) => {
@@ -28,7 +46,14 @@ function seed() {
     make(me, "Follow up with design team on onboarding flow", day(-2)),
     make(me, "Send Q4 budget draft to finance", day(-1), { sharedWith: ["priya@example.com"] }),
     make(me, "Standup: API migration blocked on auth review", day(0), { status: "done", completed_at: nowIso() }),
-    make(me, "Book room for Thursday retro", day(0)),
+    make(me, "Book room for Thursday retro", day(0), {
+      checklist: [checklistItem("Check room size", true), checklistItem("Send invite"), checklistItem("Order snacks")],
+    }),
+    make(me, "Draft hiring plan", day(-3), { status: "done", completed_at: ago(3), created_at: ago(4) }),
+    make(me, "Fix login redirect bug", day(-2), { status: "done", completed_at: ago(2), created_at: ago(2) }),
+    make(me, "Update investor deck", day(-1), { status: "done", completed_at: ago(1), created_at: ago(5) }),
+    make(me, "Write Q4 OKRs", day(0), { times_moved: 3, original_date: day(-3), created_at: ago(3) }),
+    make(me, "Old idea I didn’t need", day(-4), { deleted_at: ago(1) }),
     make(me, "Read Sam’s launch checklist before Friday: https://docs.example.com/launch/checklist-q4 (and www.example.org/faq).", day(0)),
     make(me, "Reply to customer escalation #4471", day(0), { edited_at: nowIso() }),
     make(priya, "Vendor contract: legal to review indemnity clause", day(0), { sharedWith: [me.email] }),
@@ -64,10 +89,12 @@ export function createStore() {
       emit();
       return () => listeners.delete(onNotes);
     },
-    async create(content, noteDate) {
-      notes.push({ id: `n${Date.now()}`, ...newNote(user, content, noteDate) });
+    async create(content, noteDate, checklist = []) {
+      notes.push({ id: `n${Date.now()}`, ...newNote(user, content, noteDate, checklist) });
       emit();
     },
+    async isAdmin() { return true; },
+    async listUsers() { return demoUsers(); },
     async update(note, changes) {
       Object.assign(find(note.id), patchFor(find(note.id), changes));
       emit();
