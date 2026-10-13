@@ -10,6 +10,7 @@ enum Defaults {
     static let bubbleHidden = "bubbleHidden"
     static let swing = "swing"
     static let launchedBefore = "launchedBefore"
+    static let askedScreenRecording = "askedScreenRecording"
 }
 
 func isoDay(_ date: Date = Date()) -> String {
@@ -200,6 +201,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // anything saved while offline or signed out goes up as soon as it can
         retryTimer = Timer.scheduledTimer(withTimeInterval: 120, repeats: true) { [weak self] _ in self?.cloud.flushPending() }
 
+        NSLog("QuickNotes: screen recording permission \(ScreenshotTaker.hasPermission ? "granted" : "not granted")")
+
         if cloud.isSignedIn {
             cloud.recordUser()
             cloud.importLegacyNotes { [weak self] in self?.cloud.flushPending() }
@@ -293,19 +296,45 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func askForScreenRecording() {
-        ScreenshotTaker.requestPermission()
+        let askedBefore = UserDefaults.standard.bool(forKey: Defaults.askedScreenRecording)
+        UserDefaults.standard.set(true, forKey: Defaults.askedScreenRecording)
+        ScreenshotTaker.requestPermission() // adds QuickNotes to the list / shows the system prompt the first time
+
         let a = NSAlert()
-        a.messageText = "Allow QuickNotes to take screenshots"
-        a.informativeText = "Turn on QuickNotes in System Settings › Privacy & Security › Screen & System Audio Recording, "
-            + "then quit and reopen QuickNotes. Your screen is only captured when you take a screenshot note."
+        a.messageText = askedBefore ? "QuickNotes still can’t take screenshots" : "Allow QuickNotes to take screenshots"
+        a.informativeText = askedBefore
+            ? "macOS hasn’t given QuickNotes Screen Recording permission yet.\n\n"
+              + "• Just switched it on? Quit and reopen QuickNotes; macOS only applies it after a restart.\n"
+              + "• Already on in System Settings? macOS may be remembering an older build of QuickNotes. "
+              + "Select QuickNotes there, remove it with the – button, then take a screenshot again and allow it."
+            : "Turn on QuickNotes in System Settings › Privacy & Security › Screen & System Audio Recording, "
+              + "then quit and reopen QuickNotes. Your screen is only captured when you take a screenshot note."
         a.addButton(withTitle: "Open System Settings")
+        a.addButton(withTitle: "Quit & Reopen QuickNotes")
         a.addButton(withTitle: "Cancel")
         NSApp.activate(ignoringOtherApps: true)
-        if a.runModal() == .alertFirstButtonReturn,
-           let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
-            NSWorkspace.shared.open(url)
+        switch a.runModal() {
+        case .alertFirstButtonReturn:
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture") {
+                NSWorkspace.shared.open(url)
+            }
+        case .alertSecondButtonReturn:
+            relaunch()
+        default:
+            break
         }
     }
+
+    /// Starts a fresh copy of the app after this one quits (needed for new privacy permissions to apply).
+    @objc func relaunch() {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/bin/sh")
+        p.arguments = ["-c", "sleep 1; /usr/bin/open \"$0\"", Bundle.main.bundlePath]
+        try? p.run()
+        NSApp.terminate(nil)
+    }
+
+    @objc func fixScreenRecording() { askForScreenRecording() }
 
     @objc func toggleLoginItem() {
         let service = SMAppService.mainApp
@@ -354,6 +383,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(withTitle: "New Note   ⌘⇧N  or  ⌃⌥N", action: #selector(newNote), keyEquivalent: "")
         menu.addItem(withTitle: "Screenshot of Area   ⌃⌥S", action: #selector(takeAreaScreenshot), keyEquivalent: "")
         menu.addItem(withTitle: "Screenshot of Full Screen   ⌃⌥F", action: #selector(takeFullScreenshot), keyEquivalent: "")
+        if ScreenshotTaker.hasPermission {
+            menu.addItem(withTitle: "Screen Recording: allowed ✓", action: nil, keyEquivalent: "").isEnabled = false
+        } else {
+            menu.addItem(withTitle: "Screen Recording: not allowed. Fix…", action: #selector(fixScreenRecording), keyEquivalent: "")
+        }
         menu.addItem(withTitle: "Open All Notes", action: #selector(showDashboard), keyEquivalent: "")
         menu.addItem(.separator())
         if let s = cloud.session {

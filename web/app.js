@@ -67,6 +67,37 @@ function icon(name) {
   return svg;
 }
 
+// ---------- links in note text ----------
+
+const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+
+/** Note text as DOM nodes, with web addresses turned into links that open in a new tab. */
+function linkify(text) {
+  const out = [];
+  let last = 0;
+  for (const match of text.matchAll(URL_RE)) {
+    let url = match[0];
+    // leave sentence punctuation (and an unmatched closing bracket) outside the link
+    url = url.replace(/[.,!?;:'"]+$/, "");
+    while (/[)\]}]$/.test(url) && (url.match(/[(\[{]/g) || []).length < (url.match(/[)\]}]/g) || []).length) url = url.slice(0, -1);
+    let href;
+    try {
+      href = new URL(url.startsWith("www.") ? `https://${url}` : url);
+    } catch { continue; }
+    if (href.protocol !== "http:" && href.protocol !== "https:") continue;
+
+    out.push(text.slice(last, match.index));
+    const shown = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    out.push(h("a", {
+      class: "note-link", href: href.href, target: "_blank", rel: "noopener noreferrer", title: href.href,
+      onclick: (e) => e.stopPropagation(), ondblclick: (e) => e.stopPropagation(),
+    }, shown.length > 60 ? `${shown.slice(0, 57)}…` : shown));
+    last = match.index + url.length;
+  }
+  out.push(text.slice(last));
+  return out.filter((part) => part !== "");
+}
+
 function avatar(name, photo, cls = "avatar") {
   const el = h("span", { class: cls, "aria-hidden": "true" });
   if (photo) el.append(h("img", { src: photo, alt: "", referrerpolicy: "no-referrer" }));
@@ -340,7 +371,7 @@ function noteItem(n, draggable) {
   const editing = state.editingId === n.id;
   const shot = SAFE_IMAGE.test(n.attachment?.thumb || "") ? n.attachment : null;
   const body = editing ? editor(n) : h("div", {},
-    h("div", { class: "note-text", ondblclick: () => startEdit(n.id), title: "Double-click to edit" }, n.content),
+    h("div", { class: "note-text", ondblclick: () => startEdit(n.id), title: "Double-click to edit" }, linkify(n.content)),
     shot ? h("button", { class: "shot", title: "View screenshot", "aria-label": "View screenshot", onclick: () => openShot(n) },
       h("img", { src: shot.thumb, alt: "", loading: "lazy" })) : null,
     h("div", { class: "meta" }, meta));

@@ -380,6 +380,12 @@ body.is-dragging, body.is-dragging * { cursor: grabbing !important; user-select:
 @keyframes pop { 50% { transform: scale(1.18); } }
 
 .note-text { white-space: pre-wrap; word-break: break-word; cursor: text; font-size: 15.5px; line-height: 1.45; }
+.note-link {
+  color: var(--accent); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--accent) 40%, transparent);
+  text-underline-offset: 2px; overflow-wrap: anywhere; cursor: pointer;
+}
+.note-link:hover { text-decoration-color: currentColor; }
+.note.done .note-link { color: inherit; }
 .note.done .note-text { color: var(--faint); text-decoration: line-through; text-decoration-color: var(--line-strong); }
 
 .meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 6px; }

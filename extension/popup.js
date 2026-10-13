@@ -15,6 +15,39 @@ $("open-app").addEventListener("click", (e) => {
   window.close();
 });
 
+// ---------- links in note text ----------
+
+const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+
+/** Fills `el` with the note text, web addresses as links that open in a new tab. */
+function setLinkedText(el, text) {
+  el.replaceChildren();
+  let last = 0;
+  for (const match of text.matchAll(URL_RE)) {
+    let url = match[0].replace(/[.,!?;:'"]+$/, "");
+    while (/[)\]}]$/.test(url) && (url.match(/[(\[{]/g) || []).length < (url.match(/[)\]}]/g) || []).length) url = url.slice(0, -1);
+    let href;
+    try { href = new URL(url.startsWith("www.") ? `https://${url}` : url); } catch { continue; }
+    if (href.protocol !== "http:" && href.protocol !== "https:") continue;
+
+    el.append(text.slice(last, match.index));
+    const a = document.createElement("a");
+    const shown = url.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    a.textContent = shown.length > 48 ? `${shown.slice(0, 45)}…` : shown;
+    a.href = href.href;
+    a.title = href.href;
+    a.className = "link";
+    a.addEventListener("click", (e) => {
+      e.preventDefault();
+      if (inExtension) chrome.tabs.create({ url: href.href }); else window.open(href.href, "_blank", "noopener");
+      window.close();
+    });
+    el.append(a);
+    last = match.index + url.length;
+  }
+  el.append(text.slice(last));
+}
+
 let notes = [];
 let shot = null; // { full, thumb, width, height } once "Screenshot this tab" is used
 
@@ -108,7 +141,7 @@ function renderNotes() {
 
     const text = document.createElement("span");
     text.className = "text";
-    text.textContent = n.content;
+    setLinkedText(text, n.content);
     if (n.ownerName && n.ownerId !== currentUid) text.title = `From ${n.ownerName}`;
 
     li.append(check, text);

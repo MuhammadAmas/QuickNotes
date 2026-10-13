@@ -114,6 +114,10 @@ kbd {
 .note { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; border-top: 1px solid var(--line); }
 .note:first-child { border-top: 0; }
 .note .text { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; }
+.note .text a.link {
+  color: var(--accent); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; cursor: pointer;
+}
+.note.done .text a.link { color: inherit; }
 .note.done .text { color: var(--faint); text-decoration: line-through; }
 .check {
   flex: none; display: grid; place-items: center; width: 20px; height: 20px; margin-top: 1px;

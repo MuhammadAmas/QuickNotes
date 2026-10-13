@@ -29,6 +29,7 @@ function seed() {
     make(me, "Send Q4 budget draft to finance", day(-1), { sharedWith: ["priya@example.com"] }),
     make(me, "Standup: API migration blocked on auth review", day(0), { status: "done", completed_at: nowIso() }),
     make(me, "Book room for Thursday retro", day(0)),
+    make(me, "Read Sam’s launch checklist before Friday: https://docs.example.com/launch/checklist-q4 (and www.example.org/faq).", day(0)),
     make(me, "Reply to customer escalation #4471", day(0), { edited_at: nowIso() }),
     make(priya, "Vendor contract: legal to review indemnity clause", day(0), { sharedWith: [me.email] }),
     make(me, "Prep slides for Monday review", day(1), { times_moved: 1, original_date: day(0) }),

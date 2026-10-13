@@ -11,6 +11,7 @@ const note = (content, extra = {}) => ({ id: `p${++id}`, ownerId: "me", content,
 const notes = [
   note("Book room for Thursday retro"),
   note("Reply to customer escalation #4471"),
+  note("Launch checklist: https://docs.example.com/launch/checklist-q4"),
   note("Vendor contract: legal to review indemnity clause", { ownerId: "priya", ownerName: "Priya Nair" }),
   note("Standup: API migration blocked on auth review", { status: "done" }),
 ];
