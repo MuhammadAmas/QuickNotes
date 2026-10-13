@@ -69,7 +69,12 @@ function icon(name) {
 
 // ---------- links in note text ----------
 
-const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+// web addresses with or without https:// or www. (bare ones only with a known ending like .com/.ai,
+// and not inside email addresses or file names)
+const TLDS = "com|org|net|io|ai|co|dev|app|me|so|gg|xyz|info|biz|tech|cloud|site|online|page|link|ly|to|tv|fm|design|studio|team|tools|digital|agency|store|shop|blog|news|edu|gov|mil|int|us|uk|in|pk|ca|de|fr|au|nl|es|it|jp|cn|ru|br|ch|se|no|dk|fi|ie|nz|za|sg|ae|sa|tr|pl|be|at|il|kr|mx|ar|cl|cc|ws|la|eu|asia";
+const URL_RE = new RegExp(
+  String.raw`(?<![@\w.\-/])(?:https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:${TLDS})(?![\w-])(?:[/?#][^\s<>"']*)?)`,
+  "gi");
 
 /** Note text as DOM nodes, with web addresses turned into links that open in a new tab. */
 function linkify(text) {
@@ -82,7 +87,7 @@ function linkify(text) {
     while (/[)\]}]$/.test(url) && (url.match(/[(\[{]/g) || []).length < (url.match(/[)\]}]/g) || []).length) url = url.slice(0, -1);
     let href;
     try {
-      href = new URL(url.startsWith("www.") ? `https://${url}` : url);
+      href = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`);
     } catch { continue; }
     if (href.protocol !== "http:" && href.protocol !== "https:") continue;
 

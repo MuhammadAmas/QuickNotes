@@ -17,7 +17,12 @@ $("open-app").addEventListener("click", (e) => {
 
 // ---------- links in note text ----------
 
-const URL_RE = /\b(?:https?:\/\/|www\.)[^\s<>"']+/gi;
+// web addresses with or without https:// or www. (bare ones only with a known ending like .com/.ai,
+// and not inside email addresses or file names)
+const TLDS = "com|org|net|io|ai|co|dev|app|me|so|gg|xyz|info|biz|tech|cloud|site|online|page|link|ly|to|tv|fm|design|studio|team|tools|digital|agency|store|shop|blog|news|edu|gov|mil|int|us|uk|in|pk|ca|de|fr|au|nl|es|it|jp|cn|ru|br|ch|se|no|dk|fi|ie|nz|za|sg|ae|sa|tr|pl|be|at|il|kr|mx|ar|cl|cc|ws|la|eu|asia";
+const URL_RE = new RegExp(
+  String.raw`(?<![@\w.\-/])(?:https?:\/\/[^\s<>"']+|www\.[^\s<>"']+|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+(?:${TLDS})(?![\w-])(?:[/?#][^\s<>"']*)?)`,
+  "gi");
 
 /** Fills `el` with the note text, web addresses as links that open in a new tab. */
 function setLinkedText(el, text) {
@@ -27,7 +32,7 @@ function setLinkedText(el, text) {
     let url = match[0].replace(/[.,!?;:'"]+$/, "");
     while (/[)\]}]$/.test(url) && (url.match(/[(\[{]/g) || []).length < (url.match(/[)\]}]/g) || []).length) url = url.slice(0, -1);
     let href;
-    try { href = new URL(url.startsWith("www.") ? `https://${url}` : url); } catch { continue; }
+    try { href = new URL(/^https?:\/\//i.test(url) ? url : `https://${url}`); } catch { continue; }
     if (href.protocol !== "http:" && href.protocol !== "https:") continue;
 
     el.append(text.slice(last, match.index));
