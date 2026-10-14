@@ -210,6 +210,7 @@ function render() {
   // inline inputs (checklist "add item", week "add") survive live re-renders
   const active = document.activeElement;
   const keep = active?.dataset?.keep ? { key: active.dataset.keep, value: active.value, at: active.selectionStart } : null;
+  if (moveMenu && !document.activeElement?.closest(".move-menu")) closeMoveMenu();
   renderSidebar();
   renderMain();
   renderShareDialog();
@@ -325,7 +326,11 @@ function renderMain() {
         groupHead(h("h2", { class: "group-title" }, "To do", h("span", { class: "n" }, open.length)),
           h("div", { class: "group-actions" },
             h("button", { class: "ghost-btn accent", onclick: () => carryOver(state.date, carryTarget(state.date)) },
-              `Move all to ${dayLabel(carryTarget(state.date))}`, icon("arrow-right")))),
+              `Move all to ${dayLabel(carryTarget(state.date))}`, icon("arrow-right")),
+            h("button", {
+              class: "icon-btn", title: "Move all open notes to another day…", "aria-label": "Move all open notes to another day",
+              "aria-haspopup": "menu", onclick: (e) => openMoveMenu(e.currentTarget, open, state.date),
+            }, icon("calendar")))),
         noteList(open, true)));
     } else {
       list.append(h("div", { class: "caught-up" }, icon("check-circle"), "All caught up for this day."));
@@ -360,6 +365,10 @@ function renderMain() {
         overdue ? h("span", { class: "tag overdue" }, "Overdue") : null,
         h("div", { class: "group-actions" },
           overdue ? h("button", { class: "ghost-btn accent", onclick: () => carryOver(d, t) }, "Move all to today", icon("arrow-right")) : null,
+          overdue ? h("button", {
+            class: "icon-btn", title: "Move these to another day…", "aria-label": "Move these notes to another day", "aria-haspopup": "menu",
+            onclick: (e) => openMoveMenu(e.currentTarget, groups.get(d).filter((n) => n.status === "open"), d),
+          }, icon("calendar")) : null,
           h("button", { class: "ghost-btn", onclick: () => go("day", d) }, "Open day"))),
       noteList(groups.get(d), state.view === "open" && !state.query)));
   }
@@ -596,8 +605,6 @@ function noteList(notes, draggable = false) {
 function noteItem(n, draggable) {
   const done = n.status === "done";
   const mine = isMine(n);
-  const moveTo = carryTarget(n.note_date);
-  const moveLabel = `Move to ${dayLabel(moveTo)}`;
   const shares = n.sharedWith || [];
 
   const meta = [h("span", { class: "chip", title: new Date(n.created_at).toLocaleString() }, icon("clock"), timeOf(n.created_at))];
@@ -639,7 +646,10 @@ function noteItem(n, draggable) {
     h("div", { class: "note-actions" },
       h("button", { class: "icon-btn", title: "Edit", "aria-label": "Edit note", onclick: () => startEdit(n.id) }, icon("pencil")),
       items.length ? null : h("button", { class: "icon-btn", title: "Add a checklist", "aria-label": "Add a checklist", onclick: () => openChecklist(n.id) }, icon("list-checks")),
-      done ? null : h("button", { class: "icon-btn go", title: moveLabel, "aria-label": moveLabel, onclick: () => moveNote(n, moveTo) }, icon("arrow-right")),
+      done ? null : h("button", {
+        class: "icon-btn go", title: "Move to another day…", "aria-label": "Move to another day", "aria-haspopup": "menu",
+        onclick: (e) => openMoveMenu(e.currentTarget, [n], n.note_date),
+      }, icon("arrow-right")),
       mine ? h("button", { class: "icon-btn share", title: "Share", "aria-label": "Share note", onclick: () => openShare(n.id) }, icon("share")) : null,
       mine ? h("button", { class: "icon-btn danger", title: "Delete", "aria-label": "Delete note", onclick: () => deleteNote(n) }, icon("trash")) : null));
 }
@@ -810,6 +820,69 @@ function setStatus(n, status) {
 function moveNote(n, to) {
   run(store.update(n, { note_date: to }), `Moved to ${dayLabel(to)}`);
 }
+
+// ---------- "Move to…" menu: quick picks or any date ----------
+
+let moveMenu = null;
+
+function closeMoveMenu() {
+  moveMenu?.remove();
+  moveMenu = null;
+  document.removeEventListener("pointerdown", onOutsideMoveMenu, true);
+}
+
+function onOutsideMoveMenu(e) {
+  if (moveMenu && !moveMenu.contains(e.target)) closeMoveMenu();
+}
+
+/** Opens a small menu under `anchor` to move `notes` (one or many) to any day. `from` is their current day. */
+function openMoveMenu(anchor, notes, from) {
+  if (moveMenu && anchor.dataset.menuId && moveMenu.dataset.for === anchor.dataset.menuId) return closeMoveMenu(); // second click closes it
+  closeMoveMenu();
+  if (!notes.length) return;
+  const t = today();
+  const nextMonday = addDays(t, 7 - ((parseIso(t).getDay() + 6) % 7));
+  const picks = [
+    ["Today", t],
+    ["Tomorrow", addDays(t, 1)],
+    ["Next Monday", nextMonday],
+    ["In a week", addDays(t, 7)],
+  ].filter(([, d], i, all) => d !== from && all.findIndex(([, x]) => x === d) === i); // skip the current day and duplicates
+
+  const go = (d) => {
+    closeMoveMenu();
+    if (!d || d === from) return;
+    if (notes.length === 1) moveNote(notes[0], d);
+    else run(store.updateMany(notes, { note_date: d }), `Moved ${plural(notes.length, "note")} to ${dayLabel(d)}`);
+  };
+  const dateInput = h("input", { type: "date", "aria-label": "Pick a date", value: addDays(from < t ? t : from, 1) });
+  dateInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(dateInput.value); } });
+
+  anchor.dataset.menuId ||= Math.random().toString(36).slice(2);
+  moveMenu = h("div", { class: "move-menu", role: "menu", "data-for": anchor.dataset.menuId,
+    onkeydown: (e) => { if (e.key === "Escape") { closeMoveMenu(); anchor.focus(); } } },
+    h("div", { class: "move-title" }, notes.length === 1 ? "Move to" : `Move ${plural(notes.length, "note")} to`),
+    picks.map(([label, d]) => h("button", { role: "menuitem", onclick: () => go(d) },
+      h("span", {}, label), h("small", {}, shortDate(d)))),
+    h("form", { class: "move-pick", onsubmit: (e) => { e.preventDefault(); go(dateInput.value); } },
+      h("label", {}, icon("calendar"), "Pick a date"),
+      h("div", { class: "move-pick-row" }, dateInput, h("button", { type: "submit", class: "btn-primary small" }, "Move"))));
+  document.body.append(moveMenu);
+
+  // place under the button, kept inside the window
+  const r = anchor.getBoundingClientRect();
+  const w = moveMenu.offsetWidth, hgt = moveMenu.offsetHeight;
+  let left = Math.min(r.right - w, innerWidth - w - 8);
+  left = Math.max(8, left);
+  let top = r.bottom + 6;
+  if (top + hgt > innerHeight - 8) top = Math.max(8, r.top - hgt - 6);
+  Object.assign(moveMenu.style, { left: `${left + scrollX}px`, top: `${top + scrollY}px` });
+  moveMenu.querySelector("button")?.focus();
+  setTimeout(() => document.addEventListener("pointerdown", onOutsideMoveMenu, true));
+}
+
+window.addEventListener("resize", closeMoveMenu);
+document.querySelector(".main")?.addEventListener("scroll", closeMoveMenu, { passive: true });
 
 function carryOver(from, to) {
   const list = liveNotes().filter((n) => n.note_date === from && n.status === "open");
