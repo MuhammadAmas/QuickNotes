@@ -92,10 +92,12 @@ HOSTING = {
     "public": "web",
     "cleanUrls": True,
     "ignore": ["**/.*"],
-    "headers": [{
-        "source": "**/*.@(html|js|css|webmanifest)",
-        "headers": [{"key": "Cache-Control", "value": "no-cache"}],
-    }],
+    # every page and script is re-checked on each visit (cheap: unchanged files come back as 304), so an
+    # update never leaves a cached old page next to new scripts; only icons are cached for a day
+    "headers": [
+        {"source": "**", "headers": [{"key": "Cache-Control", "value": "no-cache"}]},
+        {"source": "icons/**", "headers": [{"key": "Cache-Control", "value": "public, max-age=86400"}]},
+    ],
 }
 all_sites = list(dict.fromkeys(sites + [project]))
 write("firebase.json", json.dumps({

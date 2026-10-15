@@ -64,22 +64,30 @@ function seed() {
   ];
 }
 
+// ?demo&slow simulates a slow connection so the loading states can be checked
+const SLOW = new URLSearchParams(location.search).has("slow") ? 2500 : 0;
+
 export function createStore() {
   let user = null;
   let notes = seed();
   let authCb = () => {};
   const listeners = new Set();
-  const emit = () => queueMicrotask(() => {
-    const visible = notes.filter((n) => n.ownerId === user?.uid || n.sharedWith.includes(user?.email));
-    listeners.forEach((fn) => fn(visible.map((n) => ({ ...n }))));
-  });
+  let firstEmit = true;
+  const emit = () => {
+    const fire = () => {
+      const visible = notes.filter((n) => n.ownerId === user?.uid || n.sharedWith.includes(user?.email));
+      listeners.forEach((fn) => fn(visible.map((n) => ({ ...n }))));
+    };
+    if (firstEmit && SLOW) setTimeout(fire, SLOW); else queueMicrotask(fire);
+    firstEmit = false;
+  };
   const find = (id) => notes.find((n) => n.id === id);
 
   return {
     onAuth(callback) {
       authCb = callback;
       user = me;
-      queueMicrotask(() => callback(user));
+      setTimeout(() => callback(user), SLOW ? 1200 : 0);
       return () => {};
     },
     async signIn() { user = me; authCb(user); },

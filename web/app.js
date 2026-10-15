@@ -104,6 +104,17 @@ function linkify(text) {
   return out.filter((part) => part !== "");
 }
 
+/** Shimmering placeholder rows shaped like notes, shown while notes download. */
+function skeleton(rows = 4) {
+  const widths = ["72%", "54%", "86%", "40%", "64%"];
+  return h("div", { class: "skeleton", role: "status", "aria-live": "polite" },
+    h("span", { class: "visually-hidden" }, "Loading your notes…"),
+    h("ul", { class: "notes" }, [...Array(rows)].map((_, i) => h("li", { class: "note sk-note", "aria-hidden": "true" },
+      h("span", { class: "sk sk-check" }),
+      h("div", {}, h("span", { class: "sk sk-line", style: `width:${widths[i % widths.length]}` }),
+        h("span", { class: "sk sk-line short" }))))));
+}
+
 function avatar(name, photo, cls = "avatar") {
   const el = h("span", { class: cls, "aria-hidden": "true" });
   if (photo) el.append(h("img", { src: photo, alt: "", referrerpolicy: "no-referrer" }));
@@ -247,6 +258,11 @@ function renderSidebar() {
 
   const list = $("days");
   list.replaceChildren();
+  if (!state.loaded) {
+    for (let i = 0; i < 4; i++) {
+      list.append(h("li", { class: "sk-day", "aria-hidden": "true" }, h("span", { class: "sk sk-line" }), h("span", { class: "sk sk-line short" })));
+    }
+  }
   if (state.loaded && !days.length) list.append(h("li", { class: "days-empty" }, "Your days will show up here"));
   for (const d of days) {
     const active = !state.query && state.view === "day" && state.date === d.note_date;
@@ -278,7 +294,7 @@ function renderMain() {
     $("day-nav").hidden = state.view !== "week";
     const list = $("list");
     list.replaceChildren();
-    if (!state.loaded && !state.loadError) { list.append(h("div", { class: "loading" }, "Loading your notes…")); return; }
+    if (!state.loaded && !state.loadError) { list.append(skeleton(state.view === "week" ? 3 : 4)); return; }
     if (state.view === "week") return renderWeek(list);
     if (state.view === "summary") return renderSummary(list);
     return renderTrash(list);
@@ -317,7 +333,7 @@ function renderMain() {
   list.replaceChildren();
   if (!navigator.onLine) list.append(h("div", { class: "banner" }, icon("cloud-off"), "You’re offline. Changes are saved on this device and sync when you reconnect."));
   if (state.loadError) list.append(h("div", { class: "banner" }, `Can’t load notes: ${state.loadError}`));
-  if (!state.loaded && !state.loadError) { list.append(h("div", { class: "loading" }, "Loading your notes…")); return; }
+  if (!state.loaded && !state.loadError) { list.append(skeleton()); return; }
   if (!visible.length) { list.append(emptyState()); return; }
 
   if (isDay) {

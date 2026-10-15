@@ -638,6 +638,45 @@ a.nav-item { text-decoration: none; }
 @keyframes toast-in { from { opacity: 0; transform: translate(-50%, 8px); } }
 .toast-action { color: var(--accent); font-weight: 700; }
 
+/* ================= loading ================= */
+
+/* boot screen: shown until we know whether someone is signed in */
+.boot { display: none; }
+body.booting .boot {
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px;
+  min-height: 100vh; min-height: 100dvh;
+}
+.boot-mark { animation: boot-pulse 1.4s ease-in-out infinite; }
+.boot-text { color: var(--muted); font-size: 14px; font-weight: 500; }
+@keyframes boot-pulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 8px 22px rgba(207, 79, 29, .35), 0 0 0 0 rgba(224, 97, 42, .35); }
+  50% { transform: scale(1.06); box-shadow: 0 8px 22px rgba(207, 79, 29, .35), 0 0 0 14px rgba(224, 97, 42, 0); }
+}
+
+/* skeleton placeholders while notes download */
+.sk {
+  display: block; border-radius: 6px;
+  background: linear-gradient(90deg, var(--line) 0%, var(--surface-2) 45%, var(--line) 90%);
+  background-size: 300% 100%; animation: sk-shimmer 1.3s ease-in-out infinite;
+}
+@keyframes sk-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.sk-note { grid-template-columns: auto minmax(0, 1fr); cursor: default; }
+.sk-note:hover { background: none; }
+.sk-check { width: 22px; height: 22px; border-radius: 50%; }
+.sk-line { height: 13px; margin: 4px 0 9px; }
+.sk-line.short { width: 22%; height: 10px; margin-bottom: 2px; }
+.sk-day { padding: 9px 10px; }
+.sk-day .sk-line { width: 58%; margin: 0 0 6px; }
+.sk-day .sk-line.short { width: 34%; }
+.skeleton .stat .sk-line { width: 50%; height: 24px; }
+.skeleton .stat .sk-line.short { width: 40%; height: 10px; }
+.sk-panel { margin-top: 16px; }
+.sk-panel .sk { height: 220px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .sk, .boot-mark { animation: none; }
+}
+
 /* ================= sign-in ================= */
 
 body.booting .app, body.booting .auth { display: none !important; }

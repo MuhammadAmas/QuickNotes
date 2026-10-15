@@ -163,7 +163,22 @@ function renderNotes() {
 
 let currentUid = null;
 
+/** Placeholder rows while today's notes download (first load only). */
+function showSkeleton() {
+  const list = $("notes");
+  list.replaceChildren();
+  for (const w of ["70%", "52%", "82%"]) {
+    const li = document.createElement("li");
+    li.className = "note sk-row";
+    li.setAttribute("aria-hidden", "true");
+    li.innerHTML = `<span class="sk sk-check"></span><span class="sk sk-line" style="width:${w}"></span>`;
+    list.append(li);
+  }
+  $("count").textContent = "Loading…";
+}
+
 async function loadNotes() {
+  if (!notes.length) showSkeleton();
   try {
     notes = await notesOn(today());
     renderNotes();
