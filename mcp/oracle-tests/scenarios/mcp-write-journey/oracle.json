@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-mcp-write-journey-286133c3",
+  "title": "AI changes notes end to end",
+  "category": "MCP tools",
+  "description": "Through the MCP client: add_note (with a checklist) -> set_status done/open -> update_checklist_item -> move_notes -> move_unfinished_to_tomorrow -> trash_note -> restore.",
+  "criterion": "Through the MCP client: add_note (with a checklist) -> set_status done/open -> update_checklist_item -> move_notes -> move_unfinished_to_tomorrow -> trash_note -> restore. The fake Firestore receives exactly the patchFor fields with update masks; notesCreated increments once; unrelated notes and fields are untouched. Negative: trash on a shared note is refused with no write.",
+  "form": "deterministic",
+  "mode": "script",
+  "prerequisites": "Go 1.27+, Node 20+ (for the web-side checks). No network, no real account: a local fake Firebase is used.",
+  "script": "../../run.sh",
+  "args": [
+    "./cmd/server",
+    "TestWriteJourney"
+  ],
+  "timeout_seconds": 180
+}

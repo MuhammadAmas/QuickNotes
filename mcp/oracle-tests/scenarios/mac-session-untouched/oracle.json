@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-mac-session-untouched-58903b28",
+  "title": "Mac sign-in is never disturbed",
+  "category": "Security",
+  "description": "Across successful use and a rejected refresh token (securetoken 400), session.json keeps identical bytes, mode 0600 and mtime, and tools report 'sign in again' instead of failing silently..",
+  "criterion": "Across successful use and a rejected refresh token (securetoken 400), session.json keeps identical bytes, mode 0600 and mtime, and tools report 'sign in again' instead of failing silently.",
+  "form": "deterministic",
+  "mode": "script",
+  "prerequisites": "Go 1.27+, Node 20+ (for the web-side checks). No network, no real account: a local fake Firebase is used.",
+  "script": "../../run.sh",
+  "args": [
+    "./cmd/server ./internal/auth",
+    "TestStdioNeverLeaksTokens|TestRejectedMacSessionFallsBackAndStaysUntouched|TestNoUsableSessionSaysHowToSignIn|TestTokenUsesMacSessionAndCaches"
+  ],
+  "timeout_seconds": 180
+}

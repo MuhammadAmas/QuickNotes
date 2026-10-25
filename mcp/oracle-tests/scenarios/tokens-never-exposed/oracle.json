@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-tokens-never-exposed-a5b52304",
+  "title": "Tokens never leak",
+  "category": "Security",
+  "description": "With canary refresh and ID tokens, the built binary over real stdio and the in-memory server are driven through successful calls, Firestore 401/403/500, securetoken 400 and timeouts.",
+  "criterion": "With canary refresh and ID tokens, the built binary over real stdio and the in-memory server are driven through successful calls, Firestore 401/403/500, securetoken 400 and timeouts; the canaries never occur in stdout frames, stderr, tool results or errors, and stdout contains only JSON-RPC frames.",
+  "form": "deterministic",
+  "mode": "script",
+  "prerequisites": "Go 1.27+, Node 20+ (for the web-side checks). No network, no real account: a local fake Firebase is used.",
+  "script": "../../run.sh",
+  "args": [
+    "./cmd/server ./internal/auth ./internal/firestore",
+    "TestStdioNeverLeaksTokens|TestTestBackendOnlyAcceptsLoopback|TestNetworkErrorsDoNotLeakSecrets|TestErrorsAreClassifiedAndNeverLeakTheToken"
+  ],
+  "timeout_seconds": 180
+}

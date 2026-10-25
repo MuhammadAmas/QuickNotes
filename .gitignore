@@ -45,3 +45,14 @@ media/*.mp4
 .DS_Store
 node_modules/
 *.log
+
+# Local, disposable AI working space (AURAE)
+/.scratchpad/
+AURAE.md
+AGENTS.md
+
+# MCP server build output
+/mcp/bin/
+
+# Agent skills and settings stay local (never pushed)
+/.claude/

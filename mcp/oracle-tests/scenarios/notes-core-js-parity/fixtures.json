@@ -1,0 +1,46 @@
+{
+  "now": "2026-10-17T09:30:15.123Z",
+  "user": { "uid": "u-owner", "email": "owner@example.com", "name": "Owner Name" },
+  "parse": [
+    "Call Sam about the budget",
+    "  padded text with spaces  ",
+    "Groceries\n- milk\n* eggs\n• bread",
+    "Packing\n[ ] passport\n[x] tickets\n[X] charger\n[✓] adapter\n- [x] socks\n- [ ] shoes",
+    "- only items\n- no title",
+    "Title line\n\n   \n- item after blanks\nSecond text line",
+    "-not an item (no space)\n[] not an item either",
+    "Windows line\r\n- item with carriage return\r",
+    "\u00a0Non-breaking padded\u00a0\n-\u00a0nbsp item",
+    "\ufeffBOM start\n- \ufeffbom item",
+    "Long item\n- 0123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890123456789EXTRA",
+    "Emoji ✅ title\n- 🍎 apples\n- café crème"
+  ],
+  "many_items": 105,
+  "new_note": [
+    { "content": "Plain note", "date": "2026-10-17" },
+    { "content": "Checklist", "date": "2026-10-18", "parse": "Trip\n- bags\n[x] tickets" }
+  ],
+  "patch": [
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 }, "changes": {} },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 }, "changes": { "content": "a" } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 }, "changes": { "content": "b" } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 }, "changes": { "status": "done" } },
+    { "note": { "content": "a", "status": "done", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 }, "changes": { "status": "open" } },
+    { "note": { "content": "a", "status": "done", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 }, "changes": { "status": "done" } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 }, "changes": { "note_date": "2026-10-18" } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-18", "original_date": "2026-10-17", "times_moved": 1 }, "changes": { "note_date": "2026-10-19" } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-18", "original_date": null, "times_moved": 2 }, "changes": { "note_date": "2026-10-18" } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null }, "changes": { "note_date": "2026-10-20" } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 }, "changes": { "order": 1500.5 } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 }, "changes": { "deleted": true } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 }, "changes": { "deleted": false } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 },
+      "changes": { "checklist": [ { "id": "i1", "text": "one", "done": true }, { "id": "i2", "text": "two", "done": false } ] } },
+    { "note": { "content": "a", "status": "open", "note_date": "2026-10-17", "original_date": null, "times_moved": 0 },
+      "changes": { "content": "new", "status": "done", "note_date": "2026-10-21", "order": 7, "deleted": true } }
+  ],
+  "emails": [
+    [" Alice@Example.com ", "alice@example.com", "bob@example", "not an email", "carol@sub.example.org", "", "d@e.f"],
+    []
+  ]
+}

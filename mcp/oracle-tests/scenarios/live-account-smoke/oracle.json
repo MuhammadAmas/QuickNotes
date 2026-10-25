@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-live-account-smoke-6c84e511",
+  "title": "Works with my real notes",
+  "category": "Live account",
+  "description": "Using the built server from Claude Code (or MCP Inspector) on the real account: add a clearly labelled test note for today, see it in the web app, mark it done, move it to tomorrow, trash it, then restore and delete it from the web app.",
+  "criterion": "Using the built server from Claude Code (or MCP Inspector) on the real account: add a clearly labelled test note for today, see it in the web app, mark it done, move it to tomorrow, trash it, then restore and delete it from the web app. Nothing else changes.",
+  "form": "agentic_execution",
+  "mode": "manual",
+  "prerequisites": "The built server registered in Claude Code (or MCP Inspector), the QuickNotes Mac app signed in, and the web app open. Uses your real account: only touch the test note.",
+  "steps": [
+    {
+      "action": "Ask the AI: “Add a QuickNotes note for today: ‘MCP smoke test – delete me’.”",
+      "expected": "add_note runs; the note appears at the bottom of today in the web app within a few seconds."
+    },
+    {
+      "action": "Ask: “Mark the MCP smoke test note as done.”",
+      "expected": "set_status runs; the web app shows it ticked off."
+    },
+    {
+      "action": "Ask: “Move the smoke test note to tomorrow.”",
+      "expected": "move_notes runs; the note is now under tomorrow, marked as moved once."
+    },
+    {
+      "action": "Ask: “Trash the smoke test note.” Approve the destructive tool if asked.",
+      "expected": "trash_note runs; the note is in the web app's Trash, not deleted."
+    },
+    {
+      "action": "In the web app's Trash, restore it, then delete it forever.",
+      "expected": "No other note changed at any point; your Mac bubble still works without signing in again."
+    }
+  ]
+}

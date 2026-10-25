@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-mcp-input-rejection-1a05e59f",
+  "title": "Bad input is refused before any network call",
+  "category": "MCP tools",
+  "description": "Malformed dates, out-of-range limits, unknown enums, empty or oversized content, too many ids, unknown note or checklist ids each return a tool error naming the problem.",
+  "criterion": "Malformed dates, out-of-range limits, unknown enums, empty or oversized content, too many ids, unknown note or checklist ids each return a tool error naming the problem; schema/Go checks fire with zero Firestore requests for input errors.",
+  "form": "deterministic",
+  "mode": "script",
+  "prerequisites": "Go 1.27+, Node 20+ (for the web-side checks). No network, no real account: a local fake Firebase is used.",
+  "script": "../../run.sh",
+  "args": [
+    "./cmd/server",
+    "TestInputRejection"
+  ],
+  "timeout_seconds": 180
+}

@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-loopback-signin-safety-84cea3f9",
+  "title": "Browser sign-in fallback is safe",
+  "category": "Security",
+  "description": "Go: the login listener binds only to 127.0.0.1, rejects missing/wrong state and second use, stops after success or timeout, and writes mcp-session.json with mode 0600.",
+  "criterion": "Go: the login listener binds only to 127.0.0.1, rejects missing/wrong state and second use, stops after success or timeout, and writes mcp-session.json with mode 0600. JS: the link return check accepts only exact http://127.0.0.1:<port>/callback and http://[::1]:<port>/callback and rejects localhost names, other hosts, userinfo tricks, https, missing/privileged ports and other paths; the loopback path requires a click (never auto-redirects).",
+  "form": "deterministic",
+  "mode": "script",
+  "prerequisites": "Go 1.27+, Node 20+ (for the web-side checks). No network, no real account: a local fake Firebase is used.",
+  "script": "../../run.sh",
+  "args": [
+    "./internal/auth",
+    "TestLogin|TestLinkPageLoopbackRules"
+  ],
+  "timeout_seconds": 180
+}
