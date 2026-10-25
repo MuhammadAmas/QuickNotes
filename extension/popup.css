@@ -4,13 +4,16 @@
   --surface: #ffffff;
   --hover: rgba(60, 50, 40, .06);
   --text: #1c1b19;
-  --muted: #6b665e;
-  --faint: #a19b91;
+  --muted: #5e5950;
+  --faint: #6e695f;
   --line: #e7e4dd;
   --line-strong: #d8d4cb;
   --accent: #e0612a;
   --accent-soft: #fcebe2;
+  --accent-text: #b4481a;
+  --accent-ink: #1b0f08;
   --success: #2f9e5b;
+  --success-text: #247a46;
   --danger: #c93a31;
   color-scheme: light;
 }
@@ -22,12 +25,15 @@
     --hover: rgba(255, 245, 230, .06);
     --text: #eeebe5;
     --muted: #aaa49a;
-    --faint: #6f6a62;
+    --faint: #969188;
     --line: #2b2926;
     --line-strong: #3a3733;
     --accent: #f07a43;
     --accent-soft: rgba(240, 122, 67, .14);
+    --accent-text: #f07a43;
+    --accent-ink: #1b0f08;
     --success: #4cc27c;
+    --success-text: #4cc27c;
     --danger: #f06b62;
     color-scheme: dark;
   }
@@ -51,8 +57,8 @@ button { cursor: pointer; background: none; border: 0; padding: 0; }
 .top { display: flex; align-items: center; gap: 10px; padding: 14px 14px 10px; }
 .logo { flex: none; }
 .title { flex: 1; display: flex; flex-direction: column; line-height: 1.2; }
-.title b { font-size: 15px; }
-.title small { color: var(--accent); font-size: 12px; font-weight: 600; }
+.title h1 { margin: 0; font-size: 15px; font-weight: 700; }
+.title small { color: var(--accent-text); font-size: 12px; font-weight: 600; }
 .icon-btn {
   display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; color: var(--muted);
 }
@@ -86,7 +92,7 @@ kbd {
 .status { font-weight: 600; text-align: right; }
 
 .shot-btn {
-  display: inline-flex; align-items: center; gap: 5px; color: var(--accent); font-size: 12px; font-weight: 600;
+  display: inline-flex; align-items: center; gap: 5px; color: var(--accent-text); font-size: 12px; font-weight: 600;
   padding: 3px 6px; margin-left: -6px; border-radius: 6px;
 }
 .shot-btn:hover { background: var(--accent-soft); }
@@ -98,7 +104,7 @@ kbd {
   position: absolute; top: 6px; right: 6px; width: 22px; height: 22px; border-radius: 50%;
   background: rgba(0, 0, 0, .6); color: #fff; font-size: 11px; line-height: 22px; text-align: center;
 }
-.status.ok { color: var(--success); }
+.status.ok { color: var(--success-text); }
 .status.error { color: var(--danger); }
 
 /* loading */
@@ -132,7 +138,7 @@ kbd {
 .note:first-child { border-top: 0; }
 .note .text { flex: 1; min-width: 0; white-space: pre-wrap; word-break: break-word; }
 .note .text a.link {
-  color: var(--accent); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; cursor: pointer;
+  color: var(--accent-text); text-decoration: underline; text-underline-offset: 2px; overflow-wrap: anywhere; cursor: pointer;
 }
 .note.done .text a.link { color: inherit; }
 .note .text .progress { color: var(--faint); font-size: 12px; white-space: nowrap; }
@@ -142,7 +148,7 @@ kbd {
   border-radius: 50%; border: 1.8px solid var(--line-strong); color: transparent;
 }
 .check svg { width: 12px; height: 12px; stroke-width: 3.2; }
-.check:hover { border-color: var(--success); color: var(--success); }
+.check:hover { border-color: var(--success); color: var(--success-text); }
 .check[aria-checked="true"] { background: var(--success); border-color: var(--success); color: #fff; }
 .empty { padding: 14px; color: var(--faint); text-align: center; list-style: none; }
 

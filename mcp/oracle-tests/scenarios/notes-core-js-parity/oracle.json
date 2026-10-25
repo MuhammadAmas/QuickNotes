@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-notes-core-js-parity-1f3b5d1d",
+  "title": "Go note rules match notes-model.js",
+  "category": "Note rules",
+  "description": "For shared fixtures (plain text, every checklist syntax, limits, status flips, moves incl.",
+  "criterion": "For shared fixtures (plain text, every checklist syntax, limits, status flips, moves incl. repeated moves, trash/restore, email lists) the Go functions produce the same fields and values as notes-model.js, ignoring only generated ids and timestamps.",
+  "form": "deterministic",
+  "mode": "script",
+  "prerequisites": "Go 1.27+, Node 20+ (for the web-side checks). No network, no real account: a local fake Firebase is used.",
+  "script": "../../run.sh",
+  "args": [
+    "./internal/notes",
+    "TestParityWithNotesModelJS"
+  ],
+  "timeout_seconds": 180
+}

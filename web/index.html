@@ -47,6 +47,7 @@
       <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
       <symbol id="i-share" viewBox="0 0 24 24"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.59 13.51 6.83 3.98M15.41 6.51l-6.82 3.98"/></symbol>
       <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.4"/><circle cx="12" cy="12" r="1.4"/><circle cx="19" cy="12" r="1.4"/></symbol>
       <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
       <symbol id="i-cloud-off" viewBox="0 0 24 24"><path d="m2 2 20 20M5.78 5.78A7 7 0 0 0 9 19h8.5a4.5 4.5 0 0 0 1.31-.2M21.53 16.5A4.5 4.5 0 0 0 17.5 10h-1.79A7 7 0 0 0 10.5 5.07"/></symbol>
       <symbol id="i-grip" viewBox="0 0 24 24"><circle cx="9" cy="6" r="1"/><circle cx="15" cy="6" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="9" cy="18" r="1"/><circle cx="15" cy="18" r="1"/></symbol>
@@ -195,6 +196,25 @@
     <p class="share-error" id="share-error" hidden></p>
     <ul class="share-list" id="share-list"></ul>
     <p class="share-hint">People you add see this note after signing in with that Google account. They can tick, edit and move it; only you can delete or re-share it.</p>
+  </dialog>
+
+  <dialog class="share-dialog keys-dialog" id="keys-dialog" aria-labelledby="keys-title">
+    <div class="dialog-head">
+      <h2 id="keys-title">Keyboard shortcuts</h2>
+      <button class="icon-btn" id="keys-close" aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+    </div>
+    <dl class="keys">
+      <dt><kbd>j</kbd> <kbd>k</kbd></dt><dd>Select the next / previous note</dd>
+      <dt><kbd>x</kbd></dt><dd>Tick or untick the selected note</dd>
+      <dt><kbd>m</kbd></dt><dd>Move it to another day</dd>
+      <dt><kbd>e</kbd></dt><dd>Edit it</dd>
+      <dt><kbd>⌫</kbd></dt><dd>Move it to Trash (you can undo)</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Clear the selection</dd>
+      <dt><kbd>n</kbd></dt><dd>New note</dd>
+      <dt><kbd>/</kbd></dt><dd>Search</dd>
+      <dt><kbd>t</kbd> <kbd>w</kbd></dt><dd>Today / this week</dd>
+      <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Previous / next day</dd>
+    </dl>
   </dialog>
 
   <dialog class="shot-dialog" id="shot-dialog" aria-label="Screenshot">

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-ui-phone-targets-9eb8e8de",
+  "title": "Comfortable touch targets",
+  "category": "Web UI",
+  "description": "On phone, 0 controls under 24px (inline text links exempt) and 0 primary actions under 44pt.",
+  "criterion": "On phone, 0 controls under 24px (inline text links exempt) and 0 primary actions under 44pt.",
+  "form": "deterministic",
+  "mode": "script",
+  "script": "../../check.mjs",
+  "runtime": "node",
+  "prerequisites": "Google Chrome and Node 22+. Demo data only; no account or network needed.",
+  "timeout_seconds": 300,
+  "note": "One run of check.mjs evaluates every UI Oracle; this one passes when its section of the report meets the bar."
+}

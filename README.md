@@ -21,6 +21,7 @@ Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>N</kbd>, type, hit <kbd>Enter</kbd>. Revi
 - [Deploy](#deploy)
 - [Use your own Firebase project](#use-your-own-firebase-project)
 - [Data model & security](#data-model--security)
+- [AI assistants (MCP server)](#ai-assistants-mcp-server)
 - [Demo video](#demo-video)
 - [Troubleshooting](#troubleshooting)
 
@@ -34,7 +35,7 @@ Press <kbd>⌘</kbd><kbd>⇧</kbd><kbd>N</kbd>, type, hit <kbd>Enter</kbd>. Revi
 | **Web app** (desktop & phone) <br><img src="docs/images/phone-dark.png" width="180" alt=""> | Notes grouped by day. Tick them off, edit, **drag to set priority**, move unfinished ones to tomorrow (one by one or all at once), search, **share a note with teammates by email**, open screenshot notes full size, **checklists** inside a note (type lines starting with `-` or `[ ]`), a **Week** view (drag notes between days), a **Weekly summary** (done vs added, what keeps slipping) and **Trash** (30-day restore). Admins also get a **users dashboard**. Light/dark theme, installable on a phone's home screen, offline-capable, live sync. |
 | **Chrome extension** <br><img src="docs/images/chrome-popup.png" width="240" alt=""> | Toolbar popup (**⌥⇧N**) to add a note for today (optionally with a **screenshot of the current tab**) and tick off today's list. Right-click selected text, a link or a page → **Save to QuickNotes**. The icon badge shows today's open count. |
 
-Everyone signs in with Google; the same notes appear everywhere.
+Everyone signs in with Google; the same notes appear everywhere. AI assistants like Claude can work with your notes too, through the [MCP server](#ai-assistants-mcp-server).
 
 ## How it fits together
 
@@ -74,7 +75,8 @@ QuickNotes/
 │   ├── firebase-config.js   # generated from quicknotes.config.json (git-ignored)
 │   ├── charts.js            # small bar charts (weekly summary, users dashboard)
 │   ├── admin.html, admin.js # users dashboard (admins only)
-│   ├── link.html, link.js   # sign-in page used by the Mac app & extension
+│   ├── link.html, link.js   # sign-in page used by the Mac app, extension & quicknotes-mcp login
+│   ├── link-return.js       # which local program /link may hand a session to (tested from mcp/)
 │   └── manifest.webmanifest, icons/     # installable web app
 ├── desktop/                 # macOS app (Swift / AppKit, no Xcode project needed)
 │   ├── main.swift           # bubble, hotkeys, menus, app lifecycle
@@ -92,6 +94,7 @@ QuickNotes/
 │   ├── popup.html/css/js, background.js
 │   ├── cloud.js             # sign-in + Firestore REST
 │   └── config.js            # generated from quicknotes.config.json (git-ignored)
+├── mcp/                     # quicknotes-mcp: MCP server for AI assistants (Go module, see mcp/README.md)
 ├── quicknotes.config.example.json   # template → copy to quicknotes.config.json (git-ignored)
 ├── scripts/configure.py     # writes each app's config + firebase.json/.firebaserc from it
 ├── firestore.rules.template # database security rules (admin emails filled in by configure.py)
@@ -175,6 +178,38 @@ python3 -m http.server 5599
 There is no build step: the web app is plain HTML/CSS/ES modules and loads the Firebase SDK from Google's CDN.
 
 To try the extension popup's layout in a normal tab: `cd extension && python3 -m http.server 5598`, then open http://localhost:5598/popup.html (sample data).
+
+### Keyboard shortcuts (web app)
+
+| Key | Action |
+|---|---|
+| <kbd>j</kbd> / <kbd>k</kbd> | Select the next / previous note |
+| <kbd>x</kbd> | Tick or untick the selected note |
+| <kbd>m</kbd> | Move the selected note to another day |
+| <kbd>e</kbd> | Edit the selected note |
+| <kbd>⌫</kbd> | Move the selected note to Trash (the toast offers Undo) |
+| <kbd>Esc</kbd> | Clear the selection |
+| <kbd>n</kbd> · <kbd>/</kbd> · <kbd>t</kbd> · <kbd>w</kbd> · <kbd>←</kbd> <kbd>→</kbd> | New note · search · today · this week · previous/next day |
+| <kbd>?</kbd> | Show this list in the app |
+
+Shortcuts never fire while you're typing, while a menu or dialog is open, or with ⌘/Ctrl/⌥ held.
+
+### UI quality check
+
+```bash
+node scripts/ui-check/check.mjs
+```
+
+Starts its own local servers and a headless Chrome, then measures every web view (light and dark, desktop and phone) and the Chrome popup:
+
+- accessibility, with [axe-core](https://github.com/dequelabs/axe-core) 4.10.2, pinned in `scripts/ui-check/` and checked against its SHA-256, on every view and also on the interactive states (selected note, menus, toast, editor, shortcut list);
+- text contrast;
+- phone tap-target sizes, including whether anything covers part of a target;
+- how many notes fit on a phone screen;
+- the keyboard shortcuts, including that they stay silent while you type;
+- a smoke run of every existing flow.
+
+It exits with code 1 if anything drops below the bar, so run it before deploying UI changes. Add `--shots dir` to save screenshots of every state, or `--json file` to save the numbers. Needs Google Chrome and Node 22+.
 
 ## Deploy
 
@@ -268,6 +303,17 @@ Put the new ID in `extensionId` in `quicknotes.config.json` and redeploy. A Chro
 **Sign-in tokens on devices.** The Mac app keeps its session in `~/Library/Application Support/QuickNotes/session.json` (readable only by you), and notes waiting to upload in `pending.json` next to it. The extension stores its session in `chrome.storage.local`.
 
 **About the API key in the code.** Firebase web API keys identify the project; they aren't secrets, and access is enforced by the rules above. For extra safety you can restrict the key in Google Cloud Console → *APIs & Services → Credentials* (e.g. limit it to the Identity Toolkit, Token Service and Firestore APIs).
+
+## AI assistants (MCP server)
+
+`mcp/` holds **quicknotes-mcp**, a Go [MCP](https://modelcontextprotocol.io) server. It lets Claude Code, Claude Desktop or any MCP client list, search and summarize your notes, add new ones, tick them off, move them to another day, and trash or restore them. It signs in as you (reusing the Mac app's session, or a one-time `quicknotes-mcp login`), so the same security rules apply.
+
+```bash
+cd mcp && go build -o bin/quicknotes-mcp ./cmd/server
+claude mcp add quicknotes -- "$PWD/bin/quicknotes-mcp"
+```
+
+See [mcp/README.md](mcp/README.md) for tools, sign-in, client setup and tests.
 
 ## Demo video
 

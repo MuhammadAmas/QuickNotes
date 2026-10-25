@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-mcp-read-journey-977aa492",
+  "title": "AI reads notes end to end",
+  "category": "MCP tools",
+  "description": "A real MCP client over in-memory transport lists tools/resources/prompts, then list_notes (each view), search_notes, get_note, weekly_summary, reads quicknotes://today and gets weekly-review against a fake Firestore holding own, shared, done, moved and trashed notes.",
+  "criterion": "A real MCP client over in-memory transport lists tools/resources/prompts, then list_notes (each view), search_notes, get_note, weekly_summary, reads quicknotes://today and gets weekly-review against a fake Firestore holding own, shared, done, moved and trashed notes; results match expectations and trashed notes never appear by default.",
+  "form": "deterministic",
+  "mode": "script",
+  "prerequisites": "Go 1.27+, Node 20+ (for the web-side checks). No network, no real account: a local fake Firebase is used.",
+  "script": "../../run.sh",
+  "args": [
+    "./cmd/server",
+    "TestListsToolsResourceAndPrompt|TestReadJourney"
+  ],
+  "timeout_seconds": 180
+}

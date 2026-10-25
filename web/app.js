@@ -144,6 +144,7 @@ const state = {
   query: "",
   editingId: null,
   completedOpen: prefs.get("qn-completed-open", "1") === "1",
+  selectedId: null,   // note picked with j/k for keyboard triage
 };
 const isMine = (n) => n.ownerId === state.user?.uid;
 const liveNotes = () => state.notes.filter((n) => !n.deleted_at);
@@ -222,9 +223,11 @@ function render() {
   const active = document.activeElement;
   const keep = active?.dataset?.keep ? { key: active.dataset.keep, value: active.value, at: active.selectionStart } : null;
   if (moveMenu && !document.activeElement?.closest(".move-menu")) closeMoveMenu();
+  const refocus = state.selectedId && (document.activeElement === document.body || document.activeElement?.closest?.(".note"));
   renderSidebar();
   renderMain();
   renderShareDialog();
+  if (refocus) document.querySelector(`.note[data-id="${CSS.escape(state.selectedId)}"]`)?.focus({ preventScroll: true });
   if (keep) {
     const again = document.querySelector(`[data-keep="${CSS.escape(keep.key)}"]`);
     if (again) { again.value = keep.value; again.focus(); again.setSelectionRange(keep.at, keep.at); }
@@ -448,7 +451,7 @@ function weekCard(n) {
     h("button", {
       class: "check small", role: "checkbox", "aria-checked": String(done), "aria-label": done ? "Mark as not done" : "Mark as done",
       onclick: () => setStatus(n, done ? "open" : "done"),
-    }, icon("check")),
+    }, h("span", { class: "ring" }, icon("check"))),
     h("div", { class: "week-text" },
       h("span", {}, linkify(n.content)),
       items.length || n.attachment || !isMine(n) ? h("span", { class: "week-meta" },
@@ -573,7 +576,7 @@ function checklistBlock(n) {
       h("button", {
         class: "cl-check", role: "checkbox", "aria-checked": String(it.done), "aria-label": it.done ? "Untick item" : "Tick item",
         onclick: () => save(items.map((x) => (x.id === it.id ? { ...x, done: !x.done } : x))),
-      }, icon("check")),
+      }, h("span", { class: "ring" }, icon("check"))),
       h("span", {}, linkify(it.text)),
       h("button", { class: "cl-remove", title: "Remove item", "aria-label": "Remove item", onclick: () => save(items.filter((x) => x.id !== it.id)) }, icon("x"))))) : null,
     adding
@@ -648,7 +651,7 @@ function noteItem(n, draggable) {
       h("img", { src: shot.thumb, alt: "", loading: "lazy" })) : null,
     h("div", { class: "meta" }, meta));
 
-  return h("li", { class: `note${done ? " done" : ""}`, "data-id": n.id },
+  return h("li", { class: `note${done ? " done" : ""}${state.selectedId === n.id ? " selected" : ""}`, "data-id": n.id, tabindex: "-1" },
     draggable ? h("button", {
       class: "drag-handle", title: "Drag to set priority (or focus and press ↑ ↓)", "aria-label": "Reorder note",
       onpointerdown: (e) => startDrag(e, n), onkeydown: (e) => nudge(e, n),
@@ -657,7 +660,7 @@ function noteItem(n, draggable) {
       class: "check", role: "checkbox", "aria-checked": String(done),
       "aria-label": done ? "Mark as not done" : "Mark as done",
       onclick: () => setStatus(n, done ? "open" : "done"),
-    }, icon("check")),
+    }, h("span", { class: "ring" }, icon("check"))),
     body,
     h("div", { class: "note-actions" },
       h("button", { class: "icon-btn", title: "Edit", "aria-label": "Edit note", onclick: () => startEdit(n.id) }, icon("pencil")),
@@ -667,7 +670,11 @@ function noteItem(n, draggable) {
         onclick: (e) => openMoveMenu(e.currentTarget, [n], n.note_date),
       }, icon("arrow-right")),
       mine ? h("button", { class: "icon-btn share", title: "Share", "aria-label": "Share note", onclick: () => openShare(n.id) }, icon("share")) : null,
-      mine ? h("button", { class: "icon-btn danger", title: "Delete", "aria-label": "Delete note", onclick: () => deleteNote(n) }, icon("trash")) : null));
+      mine ? h("button", { class: "icon-btn danger", title: "Delete", "aria-label": "Delete note", onclick: () => deleteNote(n) }, icon("trash")) : null),
+    h("button", {
+      class: "icon-btn more-btn", title: "More actions", "aria-label": "More actions for this note", "aria-haspopup": "menu",
+      onclick: (e) => openNoteMenu(e.currentTarget, n),
+    }, icon("more")));
 }
 
 // ---------- drag to reorder ----------
@@ -875,29 +882,58 @@ function openMoveMenu(anchor, notes, from) {
   dateInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); go(dateInput.value); } });
 
   anchor.dataset.menuId ||= Math.random().toString(36).slice(2);
-  moveMenu = h("div", { class: "move-menu", role: "menu", "data-for": anchor.dataset.menuId,
-    onkeydown: (e) => { if (e.key === "Escape") { closeMoveMenu(); anchor.focus(); } } },
+  moveMenu = h("div", { class: "move-menu", role: "dialog", "aria-label": notes.length === 1 ? "Move to" : `Move ${plural(notes.length, "note")} to`, "data-for": anchor.dataset.menuId,
+    onkeydown: (e) => { if (e.key === "Escape") { closeMoveMenu(); refocusAnchor(anchor); } } },
     h("div", { class: "move-title" }, notes.length === 1 ? "Move to" : `Move ${plural(notes.length, "note")} to`),
-    picks.map(([label, d]) => h("button", { role: "menuitem", onclick: () => go(d) },
+    picks.map(([label, d]) => h("button", { onclick: () => go(d) },
       h("span", {}, label), h("small", {}, shortDate(d)))),
     h("form", { class: "move-pick", onsubmit: (e) => { e.preventDefault(); go(dateInput.value); } },
       h("label", {}, icon("calendar"), "Pick a date"),
       h("div", { class: "move-pick-row" }, dateInput, h("button", { type: "submit", class: "btn-primary small" }, "Move"))));
-  document.body.append(moveMenu);
+  showMenu(anchor);
+}
 
-  // place under the button, kept inside the window
+/** After a menu closes: back to its button, or to the selected note when the button can't take focus. */
+function refocusAnchor(anchor) {
+  anchor.focus();
+  if (document.activeElement !== anchor) document.querySelector(`.note[data-id="${CSS.escape(state.selectedId || "")}"]`)?.focus();
+}
+
+/** Adds the open menu to the page under `anchor` (kept inside the window) and focuses its first item. */
+function showMenu(anchor) {
+  (document.querySelector("main") || document.body).append(moveMenu); // inside the main landmark
   const r = anchor.getBoundingClientRect();
   const w = moveMenu.offsetWidth, hgt = moveMenu.offsetHeight;
   let left = Math.min(r.right - w, innerWidth - w - 8);
   left = Math.max(8, left);
   let top = r.bottom + 6;
   if (top + hgt > innerHeight - 8) top = Math.max(8, r.top - hgt - 6);
-  Object.assign(moveMenu.style, { left: `${left + scrollX}px`, top: `${top + scrollY}px` });
+  Object.assign(moveMenu.style, { left: `${left}px`, top: `${top}px` }); // position: fixed
   moveMenu.querySelector("button")?.focus();
   setTimeout(() => document.addEventListener("pointerdown", onOutsideMoveMenu, true));
 }
 
+/** The per-note menu on phones: the actions the desktop shows as a row of icons. */
+function openNoteMenu(anchor, n) {
+  if (moveMenu && anchor.dataset.menuId && moveMenu.dataset.for === anchor.dataset.menuId) return closeMoveMenu();
+  closeMoveMenu();
+  const mine = isMine(n), done = n.status === "done", items = n.checklist || [];
+  const item = (ic, label, action, cls = "") => h("button", { role: "menuitem", class: `menu-item ${cls}`, onclick: () => { closeMoveMenu(); action(); } },
+    h("span", {}, icon(ic), label));
+  anchor.dataset.menuId ||= Math.random().toString(36).slice(2);
+  moveMenu = h("div", { class: "move-menu note-menu", role: "menu", "aria-label": "Note actions", "data-for": anchor.dataset.menuId,
+    onkeydown: (e) => { if (e.key === "Escape") { closeMoveMenu(); refocusAnchor(anchor); } } },
+    item("pencil", "Edit", () => startEdit(n.id)),
+    item("list-checks", items.length ? "Add checklist item" : "Add a checklist", () => openChecklist(n.id)),
+    done ? null : h("button", { role: "menuitem", class: "menu-item", onclick: () => { closeMoveMenu(); openMoveMenu(anchor, [n], n.note_date); } },
+      h("span", {}, icon("arrow-right"), "Move to another day…")),
+    mine ? item("share", "Share", () => openShare(n.id)) : null,
+    mine ? item("trash", "Move to Trash", () => deleteNote(n), "danger") : null);
+  showMenu(anchor);
+}
+
 window.addEventListener("resize", closeMoveMenu);
+window.addEventListener("scroll", (e) => { if (moveMenu && !moveMenu.contains(e.target)) closeMoveMenu(); }, { passive: true, capture: true });
 document.querySelector(".main")?.addEventListener("scroll", closeMoveMenu, { passive: true });
 
 function carryOver(from, to) {
@@ -1105,9 +1141,11 @@ $("scrim").addEventListener("click", closeDrawer);
 
 document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") closeDrawer();
-  if (!state.user || $("share-dialog").open || $("shot-dialog").open) return;
-  const typing = e.target.closest("input, textarea");
-  if (typing || e.metaKey || e.ctrlKey || e.altKey) return;
+  if (!state.user || $("share-dialog").open || $("shot-dialog").open || $("keys-dialog").open) return;
+  const target = e.target instanceof Element ? e.target : document.body;
+  const typing = target.closest("input, textarea, select, [contenteditable]");
+  if (typing || e.metaKey || e.ctrlKey || e.altKey || target.closest(".move-menu")) return;
+  if (triageKey(e)) return;
   if (e.key === "/") { e.preventDefault(); $("search").focus(); }
   else if (e.key === "n") { e.preventDefault(); $("composer-input").focus(); }
   else if (e.key === "t") go("day", today());
@@ -1116,7 +1154,66 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "ArrowRight" && state.view === "day") go("day", addDays(state.date, 1));
 });
 
-window.addEventListener("hashchange", () => { readHash(); render(); });
+// ---------- keyboard triage: j/k select, x tick, m move, e edit, Backspace trash ----------
+
+const rowsInView = () => [...document.querySelectorAll(".notes > .note")];
+
+function selectRow(row) {
+  for (const r of document.querySelectorAll(".note.selected")) r.classList.remove("selected");
+  state.selectedId = row?.dataset.id ?? null;
+  if (!row) return;
+  row.classList.add("selected");
+  row.focus({ preventScroll: true });
+  row.scrollIntoView({ block: "nearest" });
+}
+
+const TRIAGE_KEYS = new Set(["j", "k", "x", "m", "e", "Backspace", "Delete", "Escape"]);
+
+/** Handles a triage key; returns true when it did something. */
+function triageKey(e) {
+  if (e.key === "?") { e.preventDefault(); $("keys-dialog").showModal(); return true; }
+  const rows = rowsInView();
+  if (!rows.length) return false;
+  // Only the triage keys act on notes; every other key (Space, Tab, Enter on a button…) keeps its normal meaning.
+  const onRow = e.target instanceof Element && e.target.matches(".notes > .note");
+  if (!TRIAGE_KEYS.has(e.key) && !(e.key === "Enter" && onRow)) return false;
+  // a triage key acts on the note that has focus, if any, so it never hits a different row than the one you're in
+  const focusedRow = document.activeElement?.closest?.(".notes > .note");
+  if (focusedRow && focusedRow.dataset.id !== state.selectedId) selectRow(focusedRow);
+  const at = rows.findIndex((r) => r.dataset.id === state.selectedId);
+  if (e.key === "j" || e.key === "k") {
+    e.preventDefault();
+    selectRow(rows[at < 0 ? 0 : Math.min(rows.length - 1, Math.max(0, at + (e.key === "j" ? 1 : -1)))]);
+    return true;
+  }
+  const note = at >= 0 ? state.notes.find((n) => n.id === state.selectedId) : null;
+  if (e.key === "Escape" && at >= 0) { selectRow(null); document.activeElement?.blur(); return true; }
+  if (!note) return false;
+  const row = rows[at];
+  switch (e.key) {
+    case "x": e.preventDefault(); setStatus(note, note.status === "done" ? "open" : "done"); return true;
+    case "e": e.preventDefault(); startEdit(note.id); return true;
+    case "Enter":
+      if (e.target !== row) return false; // Enter on a button keeps its normal meaning
+      e.preventDefault(); startEdit(note.id); return true;
+    case "m":
+      e.preventDefault();
+      if (note.status === "done") toast("Done notes stay on their day — untick it first to move it");
+      else openMoveMenu([row.querySelector(".icon-btn.go"), row.querySelector(".more-btn")].find((b) => b?.getClientRects().length) || row, [note], note.note_date);
+      return true;
+    case "Backspace": case "Delete":
+      e.preventDefault();
+      if (!isMine(note)) { toast("Only the owner can move this note to Trash"); return true; }
+      state.selectedId = (rows[at + 1] || rows[at - 1])?.dataset.id ?? null; // keep a selection for the next key
+      deleteNote(note);
+      return true;
+  }
+  return false;
+}
+
+$("keys-close").addEventListener("click", () => $("keys-dialog").close());
+
+window.addEventListener("hashchange", () => { state.selectedId = null; readHash(); render(); });
 window.addEventListener("online", render);
 window.addEventListener("offline", render);
 // keeps "Today" right across midnight
