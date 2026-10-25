@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-ui-keyboard-triage-a283d732",
+  "title": "Triage from the keyboard",
+  "category": "Web UI",
+  "description": "j/k/x/m/e/Backspace/Escape/? behave as specified",
+  "criterion": "j/k/x/m/e/Backspace/Escape/? behave as specified; negative: no effect while typing in the composer, search or edit box, while a menu/dialog is open, or with Cmd/Ctrl/Alt.",
+  "form": "deterministic",
+  "mode": "script",
+  "script": "../../check.mjs",
+  "runtime": "node",
+  "prerequisites": "Google Chrome and Node 22+. Demo data only; no account or network needed.",
+  "timeout_seconds": 300,
+  "note": "One run of check.mjs evaluates every UI Oracle; this one passes when its section of the report meets the bar."
+}

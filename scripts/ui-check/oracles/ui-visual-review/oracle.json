@@ -1,0 +1,25 @@
+{
+  "schema_version": 1,
+  "id": "ORACLE-ui-visual-review-cd9bfa83",
+  "title": "Looks right to a person",
+  "category": "Web UI",
+  "description": "Before/after screenshots of every view (light/dark, desktop/phone) reviewed by someone other than the builder: no broken layout, the brand still recognisable, hierarchy clearer.",
+  "criterion": "Before/after screenshots of every view (light/dark, desktop/phone) reviewed by someone other than the builder: no broken layout, the brand still recognisable, hierarchy clearer.",
+  "form": "agentic_judgment",
+  "mode": "manual",
+  "prerequisites": "Screenshots from `node scripts/ui-check/check.mjs --shots after/` (and the same command on the previous version for before/).",
+  "steps": [
+    {
+      "action": "Compare before/after screenshots of every view in light and dark, desktop and phone.",
+      "expected": "No broken or overlapping layout, nothing cut off, text clearly readable."
+    },
+    {
+      "action": "Look at the brand: logo, orange buttons, focus rings and progress bar.",
+      "expected": "QuickNotes still looks like QuickNotes; the orange is unchanged on fills and icons."
+    },
+    {
+      "action": "Look at the hierarchy on a note row (text, time, chips).",
+      "expected": "Note text stands out; secondary info is quieter but readable."
+    }
+  ]
+}
