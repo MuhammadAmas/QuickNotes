@@ -143,7 +143,7 @@ cp quicknotes.config.example.json quicknotes.config.json
 ## Quick start (using the existing QuickNotes backend)
 
 ```bash
-git clone <your-repo-url> QuickNotes
+git clone https://github.com/MuhammadAmas/QuickNotes.git QuickNotes
 cd QuickNotes
 cp quicknotes.config.example.json quicknotes.config.json   # then fill it in (see above)
 xcode-select --install          # once, if `swiftc --version` fails
